@@ -15,6 +15,7 @@ import { Route as LaboratoryRouteImport } from './routes/laboratory'
 import { Route as PharmacyRouteImport } from './routes/pharmacy'
 import { Route as RadiologyRouteImport } from './routes/radiology'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SyncRouteImport } from './routes/sync'
 import { Route as VisitsRouteImport } from './routes/visits'
 import { Route as PatientsIndexRouteImport } from './routes/patients.index'
@@ -50,6 +51,11 @@ const ReportsRoute = ReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SyncRoute = SyncRouteImport.update({
   id: '/sync',
   path: '/sync',
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/pharmacy'
     | '/radiology'
     | '/reports'
+    | '/settings'
     | '/sync'
     | '/visits'
     | '/patients/$patientId'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/pharmacy'
     | '/radiology'
     | '/reports'
+    | '/settings'
     | '/sync'
     | '/visits'
     | '/patients/$patientId'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/pharmacy'
     | '/radiology'
     | '/reports'
+    | '/settings'
     | '/sync'
     | '/visits'
     | '/patients/$patientId'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   PharmacyRoute: typeof PharmacyRoute
   RadiologyRoute: typeof RadiologyRoute
   ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
   SyncRoute: typeof SyncRoute
   VisitsRoute: typeof VisitsRoute
   PatientsPatientIdRoute: typeof PatientsPatientIdRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sync': {
       id: '/sync'
       path: '/sync'
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   PharmacyRoute: PharmacyRoute,
   RadiologyRoute: RadiologyRoute,
   ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
   SyncRoute: SyncRoute,
   VisitsRoute: VisitsRoute,
   PatientsPatientIdRoute: PatientsPatientIdRoute,
