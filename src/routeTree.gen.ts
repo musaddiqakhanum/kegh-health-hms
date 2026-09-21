@@ -14,6 +14,8 @@ import { Route as BillingRouteImport } from './routes/billing'
 import { Route as LaboratoryRouteImport } from './routes/laboratory'
 import { Route as PharmacyRouteImport } from './routes/pharmacy'
 import { Route as RadiologyRouteImport } from './routes/radiology'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SyncRouteImport } from './routes/sync'
 import { Route as VisitsRouteImport } from './routes/visits'
 import { Route as PatientsIndexRouteImport } from './routes/patients.index'
 import { Route as PatientsPatientIdRouteImport } from './routes/patients.$patientId'
@@ -43,6 +45,16 @@ const RadiologyRoute = RadiologyRouteImport.update({
   path: '/radiology',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SyncRoute = SyncRouteImport.update({
+  id: '/sync',
+  path: '/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VisitsRoute = VisitsRouteImport.update({
   id: '/visits',
   path: '/visits',
@@ -65,6 +77,8 @@ export interface FileRoutesByFullPath {
   '/laboratory': typeof LaboratoryRoute
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients/': typeof PatientsIndexRoute
@@ -75,6 +89,8 @@ export interface FileRoutesByTo {
   '/laboratory': typeof LaboratoryRoute
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients': typeof PatientsIndexRoute
@@ -86,6 +102,8 @@ export interface FileRoutesById {
   '/laboratory': typeof LaboratoryRoute
   '/pharmacy': typeof PharmacyRoute
   '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients/': typeof PatientsIndexRoute
@@ -98,6 +116,8 @@ export interface FileRouteTypes {
     | '/laboratory'
     | '/pharmacy'
     | '/radiology'
+    | '/reports'
+    | '/sync'
     | '/visits'
     | '/patients/$patientId'
     | '/patients/'
@@ -108,6 +128,8 @@ export interface FileRouteTypes {
     | '/laboratory'
     | '/pharmacy'
     | '/radiology'
+    | '/reports'
+    | '/sync'
     | '/visits'
     | '/patients/$patientId'
     | '/patients'
@@ -118,6 +140,8 @@ export interface FileRouteTypes {
     | '/laboratory'
     | '/pharmacy'
     | '/radiology'
+    | '/reports'
+    | '/sync'
     | '/visits'
     | '/patients/$patientId'
     | '/patients/'
@@ -129,6 +153,8 @@ export interface RootRouteChildren {
   LaboratoryRoute: typeof LaboratoryRoute
   PharmacyRoute: typeof PharmacyRoute
   RadiologyRoute: typeof RadiologyRoute
+  ReportsRoute: typeof ReportsRoute
+  SyncRoute: typeof SyncRoute
   VisitsRoute: typeof VisitsRoute
   PatientsPatientIdRoute: typeof PatientsPatientIdRoute
   PatientsIndexRoute: typeof PatientsIndexRoute
@@ -171,6 +197,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RadiologyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sync': {
+      id: '/sync'
+      path: '/sync'
+      fullPath: '/sync'
+      preLoaderRoute: typeof SyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/visits': {
       id: '/visits'
       path: '/visits'
@@ -201,6 +241,8 @@ const rootRouteChildren: RootRouteChildren = {
   LaboratoryRoute: LaboratoryRoute,
   PharmacyRoute: PharmacyRoute,
   RadiologyRoute: RadiologyRoute,
+  ReportsRoute: ReportsRoute,
+  SyncRoute: SyncRoute,
   VisitsRoute: VisitsRoute,
   PatientsPatientIdRoute: PatientsPatientIdRoute,
   PatientsIndexRoute: PatientsIndexRoute,
