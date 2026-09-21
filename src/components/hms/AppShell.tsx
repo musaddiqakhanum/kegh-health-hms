@@ -1,0 +1,198 @@
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Menu, Search, Wifi, WifiOff, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useHms } from "@/lib/hms/store";
+import { getStoredToken } from "@/lib/hms/drive";
+import { runSync } from "@/lib/hms/sync";
+import { navForRole } from "./nav";
+import { Button, Input } from "./ui";
+import { cn } from "@/lib/utils";
+
+function PinLock({ pin, onUnlock, onForgot }: { pin: string; onUnlock: () => void; onForgot: () => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="flex min-h-screen items-center justify-center sidebar-gradient px-4">
+      <div className="w-full max-w-xs rounded-lg bg-white p-6 text-center shadow-xl">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0b3a44] text-lg font-bold text-white">
+          K
+        </div>
+        <h1 className="text-lg font-semibold text-[#0b3a44]">KEGH HMS</h1>
+        <p className="mb-4 text-sm text-slate-500">Enter your 4-digit PIN</p>
+        <Input
+          autoFocus
+          inputMode="numeric"
+          maxLength={4}
+          value={value}
+          onChange={(e) => setValue(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              if (value === pin) onUnlock();
+              else toast.error("Incorrect PIN");
+            }
+          }}
+          className="text-center text-2xl tracking-[0.5em]"
+        />
+        <Button
+          className="mt-4 w-full"
+          onClick={() => (value === pin ? onUnlock() : toast.error("Incorrect PIN"))}
+        >
+          Unlock
+        </Button>
+        <button className="mt-3 text-xs text-slate-500 underline" onClick={onForgot}>
+          Forgot PIN (clears it on this device)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { settings, updateSettings, online, ready, state, mergeIn } = useHms();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [drawer, setDrawer] = useState(false);
+  const [query, setQuery] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const syncing = useRef(false);
+
+  useEffect(() => setDrawer(false), [pathname]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Auto-sync
+  useEffect(() => {
+    if (!ready || !settings.autoSync || !settings.driveClientId) return;
+    const tick = async () => {
+      if (syncing.current || !navigator.onLine || !getStoredToken()) return;
+      syncing.current = true;
+      try {
+        const { merged, fileCount } = await runSync(state, settings);
+        mergeIn(merged);
+        updateSettings({ lastSyncAt: Date.now(), lastSyncFileCount: fileCount });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        syncing.current = false;
+      }
+    };
+    const id = setInterval(tick, Math.max(1, settings.syncIntervalMinutes) * 60_000);
+    return () => clearInterval(id);
+  }, [ready, settings, state, mergeIn, updateSettings]);
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center sidebar-gradient">
+        <div className="animate-pulse text-3xl font-bold tracking-widest text-white">KEGH</div>
+      </div>
+    );
+  }
+
+  if (settings.pin && !unlocked) {
+    return (
+      <PinLock
+        pin={settings.pin}
+        onUnlock={() => setUnlocked(true)}
+        onForgot={() => {
+          updateSettings({ pin: "" });
+          setUnlocked(true);
+          toast.success("PIN cleared on this device");
+        }}
+      />
+    );
+  }
+
+  const items = navForRole(settings.role);
+
+  const sidebar = (
+    <aside className="sidebar-gradient flex h-full w-[236px] shrink-0 flex-col text-white">
+      <div className="flex items-center gap-3 px-5 py-5">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-lg font-bold">
+          K
+        </div>
+        <div>
+          <p className="text-lg font-bold leading-tight">KEGH</p>
+          <p className="text-xs text-white/70">Health Records</p>
+        </div>
+        <button className="ml-auto md:hidden" onClick={() => setDrawer(false)}>
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+        {items.map((item) => {
+          const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+          return (
+            <Link
+              key={item.key}
+              to={item.to}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                active ? "bg-white/20 text-white" : "text-white/80 hover:bg-white/10",
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="border-t border-white/15 px-5 py-3 text-xs text-white/75">
+        <div className="flex items-center gap-2">
+          {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+          {online ? "Online" : "Offline"} · {settings.role}
+        </div>
+        <p className="mt-1 truncate">{settings.deviceName}</p>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="flex min-h-screen">
+      <div className="hidden md:block">{sidebar}</div>
+      {drawer ? (
+        <div className="fixed inset-0 z-40 flex md:hidden">
+          <div className="h-full">{sidebar}</div>
+          <div className="flex-1 bg-black/40" onClick={() => setDrawer(false)} />
+        </div>
+      ) : null}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3">
+          <button className="md:hidden" onClick={() => setDrawer(true)}>
+            <Menu className="h-5 w-5" />
+          </button>
+          <form
+            className="relative max-w-md flex-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              navigate({ to: "/patients", search: { q: query } });
+            }}
+          >
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search patient name, MRN or phone  (press /)"
+              className="pl-9"
+            />
+          </form>
+          <span className="ml-auto hidden text-sm font-medium text-muted-foreground sm:block">
+            {settings.hospitalName}
+          </span>
+        </header>
+        <main className="flex-1 p-4 md:p-6">{children}</main>
+      </div>
+    </div>
+  );
+}
