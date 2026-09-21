@@ -6,11 +6,15 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  ClientOnly,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { HmsProvider } from "@/lib/hms/store";
+import { AppShell } from "@/components/hms/AppShell";
 
 function NotFoundComponent() {
   return (
@@ -77,21 +81,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { name: "theme-color", content: "#0b3a44" },
+      { title: "KEGH HMS — Hospital Records" },
+      { name: "description", content: "Offline-first hospital management information system." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icon-192.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -114,13 +114,28 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function Splash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center sidebar-gradient">
+      <div className="animate-pulse text-3xl font-bold tracking-widest text-white">KEGH</div>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <ClientOnly fallback={<Splash />}>
+        <HmsProvider>
+          <AppShell>
+            {/* Required: nested routes render here. */}
+            <Outlet />
+          </AppShell>
+        </HmsProvider>
+      </ClientOnly>
+      <Toaster position="bottom-right" richColors closeButton />
     </QueryClientProvider>
   );
 }

@@ -10,33 +10,167 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BillingRouteImport } from './routes/billing'
+import { Route as LaboratoryRouteImport } from './routes/laboratory'
+import { Route as PharmacyRouteImport } from './routes/pharmacy'
+import { Route as RadiologyRouteImport } from './routes/radiology'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SyncRouteImport } from './routes/sync'
+import { Route as VisitsRouteImport } from './routes/visits'
+import { Route as PatientsIndexRouteImport } from './routes/patients.index'
+import { Route as PatientsPatientIdRouteImport } from './routes/patients.$patientId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BillingRoute = BillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaboratoryRoute = LaboratoryRouteImport.update({
+  id: '/laboratory',
+  path: '/laboratory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PharmacyRoute = PharmacyRouteImport.update({
+  id: '/pharmacy',
+  path: '/pharmacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadiologyRoute = RadiologyRouteImport.update({
+  id: '/radiology',
+  path: '/radiology',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SyncRoute = SyncRouteImport.update({
+  id: '/sync',
+  path: '/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VisitsRoute = VisitsRouteImport.update({
+  id: '/visits',
+  path: '/visits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PatientsIndexRoute = PatientsIndexRouteImport.update({
+  id: '/patients/',
+  path: '/patients/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PatientsPatientIdRoute = PatientsPatientIdRouteImport.update({
+  id: '/patients/$patientId',
+  path: '/patients/$patientId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/billing': typeof BillingRoute
+  '/laboratory': typeof LaboratoryRoute
+  '/pharmacy': typeof PharmacyRoute
+  '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/sync': typeof SyncRoute
+  '/visits': typeof VisitsRoute
+  '/patients/$patientId': typeof PatientsPatientIdRoute
+  '/patients/': typeof PatientsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/billing': typeof BillingRoute
+  '/laboratory': typeof LaboratoryRoute
+  '/pharmacy': typeof PharmacyRoute
+  '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/sync': typeof SyncRoute
+  '/visits': typeof VisitsRoute
+  '/patients/$patientId': typeof PatientsPatientIdRoute
+  '/patients': typeof PatientsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/billing': typeof BillingRoute
+  '/laboratory': typeof LaboratoryRoute
+  '/pharmacy': typeof PharmacyRoute
+  '/radiology': typeof RadiologyRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/sync': typeof SyncRoute
+  '/visits': typeof VisitsRoute
+  '/patients/$patientId': typeof PatientsPatientIdRoute
+  '/patients/': typeof PatientsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/billing'
+    | '/laboratory'
+    | '/pharmacy'
+    | '/radiology'
+    | '/reports'
+    | '/settings'
+    | '/sync'
+    | '/visits'
+    | '/patients/$patientId'
+    | '/patients/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/billing'
+    | '/laboratory'
+    | '/pharmacy'
+    | '/radiology'
+    | '/reports'
+    | '/settings'
+    | '/sync'
+    | '/visits'
+    | '/patients/$patientId'
+    | '/patients'
+  id:
+    | '__root__'
+    | '/'
+    | '/billing'
+    | '/laboratory'
+    | '/pharmacy'
+    | '/radiology'
+    | '/reports'
+    | '/settings'
+    | '/sync'
+    | '/visits'
+    | '/patients/$patientId'
+    | '/patients/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BillingRoute: typeof BillingRoute
+  LaboratoryRoute: typeof LaboratoryRoute
+  PharmacyRoute: typeof PharmacyRoute
+  RadiologyRoute: typeof RadiologyRoute
+  ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
+  SyncRoute: typeof SyncRoute
+  VisitsRoute: typeof VisitsRoute
+  PatientsPatientIdRoute: typeof PatientsPatientIdRoute
+  PatientsIndexRoute: typeof PatientsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +182,91 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/billing': {
+      id: '/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof BillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/laboratory': {
+      id: '/laboratory'
+      path: '/laboratory'
+      fullPath: '/laboratory'
+      preLoaderRoute: typeof LaboratoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pharmacy': {
+      id: '/pharmacy'
+      path: '/pharmacy'
+      fullPath: '/pharmacy'
+      preLoaderRoute: typeof PharmacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radiology': {
+      id: '/radiology'
+      path: '/radiology'
+      fullPath: '/radiology'
+      preLoaderRoute: typeof RadiologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sync': {
+      id: '/sync'
+      path: '/sync'
+      fullPath: '/sync'
+      preLoaderRoute: typeof SyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/visits': {
+      id: '/visits'
+      path: '/visits'
+      fullPath: '/visits'
+      preLoaderRoute: typeof VisitsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/patients/': {
+      id: '/patients/'
+      path: '/patients'
+      fullPath: '/patients/'
+      preLoaderRoute: typeof PatientsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/patients/$patientId': {
+      id: '/patients/$patientId'
+      path: '/patients/$patientId'
+      fullPath: '/patients/$patientId'
+      preLoaderRoute: typeof PatientsPatientIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BillingRoute: BillingRoute,
+  LaboratoryRoute: LaboratoryRoute,
+  PharmacyRoute: PharmacyRoute,
+  RadiologyRoute: RadiologyRoute,
+  ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
+  SyncRoute: SyncRoute,
+  VisitsRoute: VisitsRoute,
+  PatientsPatientIdRoute: PatientsPatientIdRoute,
+  PatientsIndexRoute: PatientsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
