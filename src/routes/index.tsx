@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Circle,
@@ -14,7 +15,13 @@ import {
   Scan,
 } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
-import { billPaymentStatus, dashboardStats, sortByDateDesc } from "@/lib/hms/selectors";
+import {
+  availableDoctorsToday,
+  billPaymentStatus,
+  dashboardStats,
+  lowStockMedications,
+  sortByDateDesc,
+} from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { getStoredToken } from "@/lib/hms/drive";
 import { Button, Card, DataTable, PageHeader, Td, Badge } from "@/components/hms/ui";
@@ -130,6 +137,12 @@ function Dashboard() {
     { label: "Google Drive connected", done: Boolean(settings.driveClientId && getStoredToken()) },
     { label: "Encryption passphrase enabled", done: settings.encryptionEnabled },
   ];
+
+  const lowStock = useMemo(() => lowStockMedications(Object.values(state.pharms)), [state.pharms]);
+  const doctorsTodayList = useMemo(
+    () => availableDoctorsToday(Object.values(state.doctorSchedules ?? {})),
+    [state.doctorSchedules],
+  );
 
   const todayBills = Object.values(state.bills).filter((b) => isSameDay(b.date));
   const paidToday = todayBills.filter((b) => billPaymentStatus(b) === "Paid").length;
@@ -259,6 +272,12 @@ function Dashboard() {
             sub={`${todayBills.length} bills`}
             icon={IndianRupee}
           />
+          <Stat
+            label="Doctors available today"
+            value={stats.doctorsToday}
+            sub="As per weekly roster"
+            icon={Stethoscope}
+          />
         </div>
       ) : role === "Doctor" ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -276,6 +295,12 @@ function Dashboard() {
           />
           <Stat label="Laboratory today" value={stats.labsToday} icon={FlaskConical} />
           <Stat label="Pharmacy today" value={stats.pharmsToday} icon={Pill} />
+          <Stat
+            label="Doctors available today"
+            value={stats.doctorsToday}
+            sub="As per weekly roster"
+            icon={Stethoscope}
+          />
         </div>
       ) : role === "Lab" ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -291,6 +316,12 @@ function Dashboard() {
       ) : role === "Pharmacy" ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="Pharmacy today" value={stats.pharmsToday} icon={Pill} />
+          <Stat
+            label="Low-stock items"
+            value={stats.lowStockCount}
+            sub={stats.lowStockCount ? "Needs restock" : "Stock healthy"}
+            icon={AlertTriangle}
+          />
           <Stat label="Patients registered" value={stats.patients} icon={Users} />
           <Stat label="Visits today" value={stats.visitsToday} icon={Stethoscope} />
           <Stat
@@ -343,6 +374,18 @@ function Dashboard() {
             icon={IndianRupee}
           />
           <Stat label="Admitted (IPD)" value={stats.admitted} />
+          <Stat
+            label="Low-stock items"
+            value={stats.lowStockCount}
+            sub={stats.lowStockCount ? "Needs restock" : "Stock healthy"}
+            icon={AlertTriangle}
+          />
+          <Stat
+            label="Doctors available today"
+            value={stats.doctorsToday}
+            sub="As per weekly roster"
+            icon={Stethoscope}
+          />
         </div>
       )}
 
@@ -366,6 +409,50 @@ function Dashboard() {
               ))}
             </div>
           </Card>
+
+          {/* Low-stock alerts — Pharmacy & Admin portals */}
+          {(role === "Admin" || role === "Pharmacy") && (
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" /> Low-stock alerts
+                  <Badge tone={lowStock.length ? "red" : "green"}>{lowStock.length}</Badge>
+                </h3>
+                <Link to="/pharmacy" className="text-xs text-accent underline">
+                  Manage stock
+                </Link>
+              </div>
+              {lowStock.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No low-stock items. Set stock levels on pharmacy entries to track inventory.
+                </p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {lowStock.slice(0, 6).map((m) => (
+                    <li
+                      key={m.medication}
+                      className="flex items-center justify-between gap-2 rounded-md bg-red-50 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{m.medication}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {m.supplier ? `Supplier: ${m.supplier}` : "No supplier on file"}
+                        </p>
+                      </div>
+                      <Badge tone="red">
+                        {m.stockQty} left / min {m.minStock}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {lowStock.length > 6 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  + {lowStock.length - 6} more — see Pharmacy for the full list.
+                </p>
+              ) : null}
+            </Card>
+          )}
 
           {/* Today's appointments shortcut */}
           <Card>
@@ -513,6 +600,45 @@ function Dashboard() {
               </ul>
             )}
           </Card>
+
+          {/* Today's roster — who is available to book */}
+          {(role === "Admin" || role === "Reception" || role === "Doctor") && (
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                  <Stethoscope className="h-4 w-4" /> Available today
+                  <Badge tone={doctorsTodayList.length ? "green" : "neutral"}>
+                    {doctorsTodayList.length}
+                  </Badge>
+                </h3>
+                <Link to="/appointments" className="text-xs text-accent underline">
+                  Roster
+                </Link>
+              </div>
+              {doctorsTodayList.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No doctors on today's roster. Add weekly availability under Appointments.
+                </p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {doctorsTodayList.slice(0, 6).map((d) => (
+                    <li
+                      key={d.id}
+                      className="flex items-start justify-between gap-2 rounded-md bg-muted/60 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{d.doctor}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {d.department || "General"}
+                          {d.slots ? ` · ${d.slots}` : ""}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           {/* Collections summary - visible to billing/admin/reception */}
           {(role === "Admin" || role === "Billing" || role === "Reception") && (

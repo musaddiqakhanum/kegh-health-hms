@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { packState, unpackState } from "@/lib/hms/pack";
 import { getPassphrase, setPassphrase } from "@/lib/hms/sync";
 import { downloadBlob } from "@/lib/hms/csv";
+import { fmtDateTime } from "@/lib/hms/format";
 import type { Role } from "@/lib/hms/types";
-import { Button, Card, Field, Input, PageHeader, Select } from "@/components/hms/ui";
+import { Badge, Button, Card, Field, Input, PageHeader, Select } from "@/components/hms/ui";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -34,6 +35,14 @@ function SettingsPage() {
   const [pin, setPin] = useState(settings.pin);
   const [pass, setPass] = useState(getPassphrase());
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const auditEntries = useMemo(
+    () =>
+      Object.values(state.auditLogs ?? {})
+        .sort((a, b) => b.timestamp - a.timestamp || b.createdAt - a.createdAt)
+        .slice(0, 50),
+    [state.auditLogs],
+  );
 
   const exportKeg = async () => {
     try {
@@ -221,6 +230,61 @@ function SettingsPage() {
           />
         </div>
       </Card>
+
+      {settings.role === "Admin" ? (
+        <Card className="space-y-4">
+          <div>
+            <h2 className="font-semibold">Audit log</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last {auditEntries.length} write{auditEntries.length === 1 ? "" : "s"} across all
+              synced devices — creations, updates and deletions.
+            </p>
+          </div>
+          {auditEntries.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No audit entries yet. They appear here as records are created, updated or deleted.
+            </p>
+          ) : (
+            <div className="max-h-96 overflow-auto rounded-md ring-1 ring-border/60">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead className="sticky top-0 bg-secondary">
+                  <tr>
+                    {["Time", "Action", "Collection", "Record", "Device", "Role"].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+                  {auditEntries.map((a) => (
+                    <tr key={a.id}>
+                      <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(a.timestamp)}</td>
+                      <td className="px-3 py-2">
+                        <Badge
+                          tone={
+                            a.action === "create"
+                              ? "green"
+                              : a.action === "delete"
+                                ? "red"
+                                : "amber"
+                          }
+                        >
+                          {a.action}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2">{a.collection}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{a.recordId.slice(0, 8)}</td>
+                      <td className="px-3 py-2">{a.deviceName}</td>
+                      <td className="px-3 py-2">{a.role}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

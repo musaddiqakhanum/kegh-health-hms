@@ -139,11 +139,16 @@ function ReportsPage() {
     }
     const r = rows as unknown as (typeof state.bills)[string][];
     const modes = ["Cash", "UPI", "Card", "Insurance"];
+    const subtotalOf = (x: (typeof r)[number]) =>
+      (x.items ?? []).reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0);
     return {
-      head: ["Date", "Patient", "Total", "Paid", "Due", "Mode"],
+      head: ["Date", "Patient", "Subtotal", "Disc.", "Tax", "Total", "Paid", "Due", "Mode"],
       body: r.map((x) => [
         fmtDate(x.date),
         name(x.patientId),
+        money(subtotalOf(x)),
+        money(x.discount),
+        money(x.tax),
         money(x.totalAmount),
         money(x.paid),
         money(x.due),
@@ -152,7 +157,9 @@ function ReportsPage() {
       summary: [
         ["Bills", String(r.length)],
         ["Billed", money(r.reduce((s, x) => s + Number(x.totalAmount || 0), 0))],
-        ["Collected", money(r.reduce((s, x) => s + Number(x.paid || 0), 0))],
+        ["Discount given", money(r.reduce((s, x) => s + Number(x.discount || 0), 0))],
+        ["Tax charged", money(r.reduce((s, x) => s + Number(x.tax || 0), 0))],
+        ["Net collected", money(r.reduce((s, x) => s + Number(x.paid || 0), 0))],
         ["Outstanding", money(r.reduce((s, x) => s + Number(x.due || 0), 0))],
         ...modes.map((m) => [
           `Collected via ${m}`,
@@ -177,6 +184,8 @@ function ReportsPage() {
   const paidSummary = useMemo(() => {
     const billed = paidRows.reduce((s, b) => s + Number(b.totalAmount || 0), 0);
     const collected = paidRows.reduce((s, b) => s + Number(b.paid || 0), 0);
+    const discount = paidRows.reduce((s, b) => s + Number(b.discount || 0), 0);
+    const tax = paidRows.reduce((s, b) => s + Number(b.tax || 0), 0);
     const outstanding = paidRows.reduce((s, b) => s + Number(b.due || 0), 0);
     const efficiency = billed > 0 ? (collected / billed) * 100 : 0;
     const byMode = ["Cash", "UPI", "Card", "Insurance"].map((m) => ({
@@ -193,7 +202,19 @@ function ReportsPage() {
         .filter((b) => billPaymentStatus(b) === s)
         .reduce((sum, b) => sum + Number(b.totalAmount || 0), 0),
     }));
-    return { billed, collected, outstanding, efficiency, byMode, byStatus, count: paidRows.length };
+    return {
+      billed,
+      collected,
+      /** Net cash in hand after discounts and taxes flow through the grand total. */
+      netCollected: collected,
+      discount,
+      tax,
+      outstanding,
+      efficiency,
+      byMode,
+      byStatus,
+      count: paidRows.length,
+    };
   }, [paidRows]);
 
   const patient = patientId ? state.patients[patientId] : null;
@@ -215,12 +236,25 @@ function ReportsPage() {
     downloadCsv(`${section}-${range}-report.csv`, [sectionTable.head, ...sectionTable.body]);
 
   const exportPaidCsv = () => {
-    const head = ["Date", "Patient", "MRN", "Total", "Paid", "Due", "Mode", "Status"];
+    const head = [
+      "Date",
+      "Patient",
+      "MRN",
+      "Total",
+      "Discount",
+      "Tax",
+      "Paid",
+      "Due",
+      "Mode",
+      "Status",
+    ];
     const body = paidRows.map((b) => [
       b.date,
       state.patients[b.patientId]?.name ?? "—",
       state.patients[b.patientId]?.mrn ?? "—",
       String(b.totalAmount),
+      String(Number(b.discount || 0)),
+      String(Number(b.tax || 0)),
       String(b.paid),
       String(b.due),
       b.paymentMode,
@@ -315,10 +349,18 @@ function ReportsPage() {
             <p className="text-xs text-muted-foreground">Billed</p>
             <p className="text-base font-semibold">{money(paidSummary.billed)}</p>
           </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Discount given</p>
+            <p className="text-base font-semibold">{money(paidSummary.discount)}</p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Tax charged</p>
+            <p className="text-base font-semibold">{money(paidSummary.tax)}</p>
+          </div>
           <div className="rounded-md bg-emerald-50 px-3 py-2">
-            <p className="text-xs text-muted-foreground">Collected (Paid)</p>
+            <p className="text-xs text-muted-foreground">Net collected</p>
             <p className="text-base font-semibold text-emerald-700">
-              {money(paidSummary.collected)}
+              {money(paidSummary.netCollected)}
             </p>
           </div>
           <div className="rounded-md bg-amber-50 px-3 py-2">
@@ -350,14 +392,16 @@ function ReportsPage() {
         </div>
 
         <div className="mt-4 max-h-80 overflow-auto rounded-md ring-1 ring-border/60">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="sticky top-0 bg-secondary">
               <tr>
-                {["Date", "Patient", "Total", "Paid", "Due", "Mode", "Status"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
-                    {h}
-                  </th>
-                ))}
+                {["Date", "Patient", "Total", "Disc.", "Tax", "Paid", "Due", "Mode", "Status"].map(
+                  (h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                      {h}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
@@ -368,6 +412,8 @@ function ReportsPage() {
                     <td className="px-3 py-2">{fmtDate(b.date)}</td>
                     <td className="px-3 py-2">{state.patients[b.patientId]?.name ?? "—"}</td>
                     <td className="px-3 py-2">{money(b.totalAmount)}</td>
+                    <td className="px-3 py-2">{money(b.discount)}</td>
+                    <td className="px-3 py-2">{money(b.tax)}</td>
                     <td className="px-3 py-2">{money(b.paid)}</td>
                     <td className="px-3 py-2">{money(b.due)}</td>
                     <td className="px-3 py-2">{b.paymentMode}</td>
@@ -516,8 +562,16 @@ function ReportsPage() {
               <td>{money(paidSummary.billed)}</td>
             </tr>
             <tr>
-              <th>Collected</th>
-              <td>{money(paidSummary.collected)}</td>
+              <th>Discount given</th>
+              <td>{money(paidSummary.discount)}</td>
+            </tr>
+            <tr>
+              <th>Tax charged</th>
+              <td>{money(paidSummary.tax)}</td>
+            </tr>
+            <tr>
+              <th>Net collected</th>
+              <td>{money(paidSummary.netCollected)}</td>
             </tr>
             <tr>
               <th>Outstanding</th>
@@ -551,6 +605,8 @@ function ReportsPage() {
               <th>Date</th>
               <th>Patient</th>
               <th>Total</th>
+              <th>Discount</th>
+              <th>Tax</th>
               <th>Paid</th>
               <th>Due</th>
               <th>Mode</th>
@@ -563,6 +619,8 @@ function ReportsPage() {
                 <td>{fmtDate(b.date)}</td>
                 <td>{state.patients[b.patientId]?.name ?? "—"}</td>
                 <td>{money(b.totalAmount)}</td>
+                <td>{money(b.discount)}</td>
+                <td>{money(b.tax)}</td>
                 <td>{money(b.paid)}</td>
                 <td>{money(b.due)}</td>
                 <td>{b.paymentMode}</td>

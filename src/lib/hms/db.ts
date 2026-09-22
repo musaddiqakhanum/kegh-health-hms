@@ -22,6 +22,11 @@ export async function loadState(): Promise<HmsState> {
       appointments:
         (raw as HmsState & { appointments?: HmsState["appointments"] }).appointments ??
         base.appointments,
+      doctorSchedules:
+        (raw as HmsState & { doctorSchedules?: HmsState["doctorSchedules"] }).doctorSchedules ??
+        base.doctorSchedules,
+      auditLogs:
+        (raw as HmsState & { auditLogs?: HmsState["auditLogs"] }).auditLogs ?? base.auditLogs,
       ops: (raw as HmsState).ops ?? base.ops,
       deleted: (raw as HmsState).deleted ?? base.deleted,
     };

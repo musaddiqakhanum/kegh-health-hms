@@ -3,12 +3,18 @@ import { useMemo, useState } from "react";
 import { CalendarDays, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
-import { sortByDateDesc } from "@/lib/hms/selectors";
+import { WEEKDAY_SHORT, doctorsAvailableOn, sortByDateDesc } from "@/lib/hms/selectors";
 import { fmtDate, todayISO } from "@/lib/hms/format";
-import type { Appointment, AppointmentStatus, AppointmentType } from "@/lib/hms/types";
+import type {
+  Appointment,
+  AppointmentStatus,
+  AppointmentType,
+  DoctorSchedule,
+} from "@/lib/hms/types";
 import {
   Badge,
   Button,
+  Card,
   DataTable,
   Field,
   Input,
@@ -26,7 +32,8 @@ export const Route = createFileRoute("/appointments")({
       { title: "Appointments — KEGH HMS" },
       {
         name: "description",
-        content: "Schedule, confirm and track patient appointments with doctor and department.",
+        content:
+          "Schedule, confirm and track patient appointments with doctor roster and department.",
       },
       { property: "og:title", content: "Appointments — KEGH HMS" },
       {
@@ -47,6 +54,8 @@ const STATUSES: AppointmentStatus[] = [
   "Cancelled",
   "NoShow",
 ];
+/** Monday-first ordering for the roster UI (JS day numbers). */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const blank = (): Partial<Appointment> => ({
   patientId: "",
@@ -59,6 +68,14 @@ const blank = (): Partial<Appointment> => ({
   notes: "",
 });
 
+const blankSchedule = (): Partial<DoctorSchedule> => ({
+  doctor: "",
+  department: "",
+  days: [1, 2, 3, 4, 5, 6],
+  slots: "",
+  active: true,
+});
+
 function statusTone(s: AppointmentStatus): "green" | "amber" | "red" | "neutral" {
   if (s === "Completed" || s === "Confirmed") return "green";
   if (s === "Scheduled" || s === "CheckedIn") return "amber";
@@ -66,12 +83,29 @@ function statusTone(s: AppointmentStatus): "green" | "amber" | "red" | "neutral"
   return "neutral";
 }
 
+function daysLabel(days: number[] | undefined): string {
+  if (!days || days.length === 0) return "—";
+  if (days.length === 7) return "Daily";
+  return [...days]
+    .sort((a, b) => WEEK_ORDER.indexOf(a) - WEEK_ORDER.indexOf(b))
+    .map((d) => WEEKDAY_SHORT[d])
+    .join(" ");
+}
+
 function AppointmentsPage() {
-  const { state, upsert, remove } = useHms();
+  const { state, settings, upsert, remove } = useHms();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Appointment>>(blank);
+  const [showCustomDoctor, setShowCustomDoctor] = useState(false);
   const [filterStatus, setFilterStatus] = useState<AppointmentStatus | "All">("All");
   const [filterDate, setFilterDate] = useState("");
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [rosterForm, setRosterForm] = useState<Partial<DoctorSchedule>>(blankSchedule);
+
+  const schedules = useMemo(
+    () => Object.values(state.doctorSchedules ?? {}),
+    [state.doctorSchedules],
+  );
 
   const rows = useMemo(() => {
     let list = sortByDateDesc(
@@ -92,6 +126,28 @@ function AppointmentsPage() {
 
   const set = (k: keyof Appointment, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  /** Roster doctors available on the selected appointment day. */
+  const available = useMemo(
+    () => doctorsAvailableOn(schedules, form.date ?? ""),
+    [schedules, form.date],
+  );
+  const isCustomDoctor = Boolean(form.doctor) && !available.some((s) => s.doctor === form.doctor);
+
+  const pickRosterDoctor = (value: string) => {
+    if (value === "__custom") {
+      setShowCustomDoctor(true);
+      setForm((f) => ({ ...f, doctor: "" }));
+      return;
+    }
+    setShowCustomDoctor(false);
+    const match = available.find((s) => s.doctor === value);
+    setForm((f) => ({
+      ...f,
+      doctor: value,
+      department: match?.department ?? f.department ?? "",
+    }));
+  };
+
   const save = () => {
     if (!form.patientId) {
       toast.error("Select a patient");
@@ -106,8 +162,39 @@ function AppointmentsPage() {
     setOpen(false);
   };
 
+  const saveSchedule = () => {
+    if (!rosterForm.doctor?.trim()) {
+      toast.error("Doctor name is required");
+      return;
+    }
+    if (!rosterForm.days || rosterForm.days.length === 0) {
+      toast.error("Select at least one weekday");
+      return;
+    }
+    upsert<DoctorSchedule>("doctorSchedules", {
+      ...rosterForm,
+      doctor: rosterForm.doctor.trim(),
+      department: rosterForm.department?.trim() ?? "",
+      slots: rosterForm.slots?.trim() ?? "",
+      active: rosterForm.active !== false,
+    } as DoctorSchedule);
+    toast.success(rosterForm.id ? "Roster updated" : "Roster added");
+    setRosterOpen(false);
+  };
+
+  const toggleDay = (day: number) => {
+    setRosterForm((f) => {
+      const days = f.days ?? [];
+      return {
+        ...f,
+        days: days.includes(day) ? days.filter((d) => d !== day) : [...days, day],
+      };
+    });
+  };
+
   const today = todayISO();
   const todayCount = Object.values(state.appointments ?? {}).filter((a) => a.date === today).length;
+  const canManageRoster = settings.role === "Admin" || settings.role === "Reception";
 
   return (
     <div>
@@ -118,6 +205,7 @@ function AppointmentsPage() {
           <Button
             onClick={() => {
               setForm(blank());
+              setShowCustomDoctor(false);
               setOpen(true);
             }}
           >
@@ -191,6 +279,7 @@ function AppointmentsPage() {
                 className="mr-2 text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setForm(a);
+                  setShowCustomDoctor(false);
                   setOpen(true);
                 }}
               >
@@ -211,6 +300,96 @@ function AppointmentsPage() {
           </tr>
         ))}
       </DataTable>
+
+      {/* Weekly doctor roster */}
+      <Card className="mt-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Doctor roster — weekly availability
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The appointment form only lists doctors who are on roster for the chosen day.
+            </p>
+          </div>
+          {canManageRoster ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRosterForm(blankSchedule());
+                setRosterOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" /> Add availability
+            </Button>
+          ) : null}
+        </div>
+        {schedules.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No roster entries yet.
+            {canManageRoster
+              ? " Add weekly availability so Reception can book against real OPD days."
+              : ""}
+          </p>
+        ) : (
+          <div className="max-h-72 overflow-auto rounded-md ring-1 ring-border/60">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="sticky top-0 bg-secondary">
+                <tr>
+                  {["Doctor", "Department", "Days", "Time slots", "Status", ""].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+                {[...schedules]
+                  .sort((a, b) => a.doctor.localeCompare(b.doctor))
+                  .map((s) => (
+                    <tr key={s.id}>
+                      <td className="px-3 py-2 font-medium">{s.doctor}</td>
+                      <td className="px-3 py-2">{s.department || "—"}</td>
+                      <td className="px-3 py-2">{daysLabel(s.days)}</td>
+                      <td className="px-3 py-2">{s.slots || "—"}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone={s.active === false ? "neutral" : "green"}>
+                          {s.active === false ? "Inactive" : "Active"}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {canManageRoster ? (
+                          <>
+                            <button
+                              className="mr-2 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                setRosterForm(s);
+                                setRosterOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                if (confirmDelete(`roster for ${s.doctor}`)) {
+                                  remove("doctorSchedules", s.id);
+                                  toast.success("Roster entry deleted");
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Modal
         open={open}
@@ -236,13 +415,39 @@ function AppointmentsPage() {
               onChange={(e) => set("time", e.target.value)}
             />
           </Field>
-          <Field label="Doctor">
-            <Input
-              value={form.doctor ?? ""}
-              onChange={(e) => set("doctor", e.target.value)}
-              placeholder="Dr. Name"
-            />
+          <Field
+            label={`Doctor${form.date ? ` — ${available.length} on roster` : ""}`}
+            {...(showCustomDoctor || isCustomDoctor ? {} : { className: "sm:col-span-2" })}
+          >
+            <Select
+              value={showCustomDoctor || isCustomDoctor ? "__custom" : (form.doctor ?? "")}
+              onChange={(e) => pickRosterDoctor(e.target.value)}
+            >
+              <option value="">Select doctor…</option>
+              {available.map((s) => (
+                <option key={s.id} value={s.doctor}>
+                  {s.doctor}
+                  {s.department ? ` · ${s.department}` : ""}
+                  {s.slots ? ` (${s.slots})` : ""}
+                </option>
+              ))}
+              <option value="__custom">Other / not on roster…</option>
+            </Select>
+            {form.date && available.length === 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No doctors on roster for this day — choose “Other” or add availability below.
+              </p>
+            ) : null}
           </Field>
+          {showCustomDoctor || isCustomDoctor ? (
+            <Field label="Other doctor name">
+              <Input
+                value={form.doctor ?? ""}
+                onChange={(e) => set("doctor", e.target.value)}
+                placeholder="Dr. Name"
+              />
+            </Field>
+          ) : null}
           <Field label="Department">
             <Input
               value={form.department ?? ""}
@@ -284,6 +489,74 @@ function AppointmentsPage() {
             Cancel
           </Button>
           <Button onClick={save}>Save appointment</Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={rosterOpen}
+        title={rosterForm.id ? "Edit roster entry" : "Add doctor availability"}
+        onClose={() => setRosterOpen(false)}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Doctor" required>
+            <Input
+              value={rosterForm.doctor ?? ""}
+              placeholder="Dr. Name"
+              onChange={(e) => setRosterForm((f) => ({ ...f, doctor: e.target.value }))}
+            />
+          </Field>
+          <Field label="Department">
+            <Input
+              value={rosterForm.department ?? ""}
+              placeholder="General Medicine"
+              onChange={(e) => setRosterForm((f) => ({ ...f, department: e.target.value }))}
+            />
+          </Field>
+          <Field label="Available days" required className="sm:col-span-2">
+            <div className="flex flex-wrap gap-2">
+              {WEEK_ORDER.map((d) => {
+                const on = (rosterForm.days ?? []).includes(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDay(d)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium ring-1 transition-colors ${
+                      on
+                        ? "bg-primary text-primary-foreground ring-primary"
+                        : "bg-card text-muted-foreground ring-border hover:bg-muted"
+                    }`}
+                  >
+                    {WEEKDAY_SHORT[d]}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+          <Field label="Time slots">
+            <Input
+              value={rosterForm.slots ?? ""}
+              placeholder="09:00-13:00, 17:00-20:00"
+              onChange={(e) => setRosterForm((f) => ({ ...f, slots: e.target.value }))}
+            />
+          </Field>
+          <Field label="Status">
+            <Select
+              value={rosterForm.active === false ? "inactive" : "active"}
+              onChange={(e) =>
+                setRosterForm((f) => ({ ...f, active: e.target.value === "active" }))
+              }
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </Select>
+          </Field>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setRosterOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={saveSchedule}>Save roster</Button>
         </div>
       </Modal>
     </div>

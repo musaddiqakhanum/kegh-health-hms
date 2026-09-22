@@ -44,6 +44,8 @@ const blank = (): Partial<Bill> => ({
   date: todayISO(),
   items: [blankItem()],
   totalAmount: 0,
+  discount: 0,
+  tax: 0,
   paid: 0,
   due: 0,
   paymentMode: "Cash",
@@ -56,8 +58,11 @@ function BillingPage() {
   const rows = useMemo(() => sortByDateDesc(Object.values(state.bills)), [state.bills]);
 
   const items = form.items ?? [];
-  const total = items.reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0);
-  const due = total - Number(form.paid || 0);
+  const subtotal = items.reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0);
+  const discount = Math.max(0, Number(form.discount || 0));
+  const tax = Math.max(0, Number(form.tax || 0));
+  const grandTotal = Math.max(0, subtotal - discount) + tax;
+  const due = grandTotal - Number(form.paid || 0);
 
   const setItem = (idx: number, patch: Partial<BillItem>) =>
     setForm((f) => {
@@ -81,7 +86,9 @@ function BillingPage() {
     upsert<Bill>("bills", {
       ...form,
       items: cleaned,
-      totalAmount: total,
+      totalAmount: grandTotal,
+      discount,
+      tax,
       paid: Number(form.paid || 0),
       due,
     } as Bill);
@@ -107,7 +114,19 @@ function BillingPage() {
       />
 
       <DataTable
-        columns={["Date", "Patient", "Items", "Total", "Paid", "Due", "Mode", ""]}
+        columns={[
+          "Date",
+          "Patient",
+          "Items",
+          "Subtotal",
+          "Disc.",
+          "Tax",
+          "Total",
+          "Paid",
+          "Due",
+          "Mode",
+          "",
+        ]}
         rowCount={rows.length}
       >
         {rows.map((b) => (
@@ -115,7 +134,14 @@ function BillingPage() {
             <Td>{fmtDate(b.date)}</Td>
             <Td>{state.patients[b.patientId]?.name ?? "—"}</Td>
             <Td>{b.items?.length ?? 0}</Td>
-            <Td>{money(b.totalAmount)}</Td>
+            <Td>
+              {money(
+                (b.items ?? []).reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0),
+              )}
+            </Td>
+            <Td>{money(b.discount)}</Td>
+            <Td>{money(b.tax)}</Td>
+            <Td className="font-medium">{money(b.totalAmount)}</Td>
             <Td>{money(b.paid)}</Td>
             <Td>
               <Badge tone={Number(b.due) <= 0 ? "green" : Number(b.paid) > 0 ? "amber" : "red"}>
@@ -228,6 +254,24 @@ function BillingPage() {
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Field label="Discount (₹)">
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.discount ?? 0}
+              onChange={(e) => setForm((f) => ({ ...f, discount: Number(e.target.value) }))}
+            />
+          </Field>
+          <Field label="Tax (₹)">
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.tax ?? 0}
+              onChange={(e) => setForm((f) => ({ ...f, tax: Number(e.target.value) }))}
+            />
+          </Field>
           <Field label="Paid amount (₹)">
             <Input
               type="number"
@@ -248,12 +292,15 @@ function BillingPage() {
               <option>Insurance</option>
             </Select>
           </Field>
-          <div className="rounded-md bg-muted px-3 py-2 text-sm">
+          <div className="rounded-md bg-muted px-3 py-2 text-sm sm:col-span-2">
             <p>
-              Total: <strong>{money(total)}</strong>
+              Subtotal: <strong>{money(subtotal)}</strong>
+              {" · "}Discount: <strong>−{money(discount)}</strong>
+              {" · "}Tax: <strong>+{money(tax)}</strong>
             </p>
-            <p>
-              Due: <strong>{money(due)}</strong>
+            <p className="mt-1">
+              Grand total: <strong>{money(grandTotal)}</strong>
+              {" · "}Due: <strong>{money(due)}</strong>
             </p>
           </div>
         </div>
