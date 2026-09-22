@@ -41,8 +41,8 @@ function VisitsPage() {
   const set = (k: keyof Visit, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
-    if (!form.patientId) return toast.error("Select a patient");
-    if (!form.date) return toast.error("Visit date is required");
+    if (!form.patientId) { toast.error("Select a patient"); return; }
+    if (!form.date) { toast.error("Visit date is required"); return; }
     upsert<Visit>("visits", form as Visit);
     toast.success(form.id ? "Visit updated" : "Visit added");
     setOpen(false);

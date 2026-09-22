@@ -102,7 +102,7 @@ function SettingsPage() {
           </Field>
           <Button
             onClick={() => {
-              if (pin && pin.length !== 4) return toast.error("PIN must be 4 digits");
+              if (pin && pin.length !== 4) { toast.error("PIN must be 4 digits"); return; }
               updateSettings({ pin });
               toast.success(pin ? "PIN saved — required next time the app opens" : "PIN removed");
             }}

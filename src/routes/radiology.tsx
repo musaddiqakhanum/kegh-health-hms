@@ -33,8 +33,8 @@ function RadPage() {
   const set = (k: keyof Rad, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
-    if (!form.patientId) return toast.error("Select a patient");
-    if (!form.studyType?.trim()) return toast.error("Study type is required");
+    if (!form.patientId) { toast.error("Select a patient"); return; }
+    if (!form.studyType?.trim()) { toast.error("Study type is required"); return; }
     upsert<Rad>("rads", form as Rad);
     toast.success(form.id ? "Study updated" : "Study added");
     setOpen(false);

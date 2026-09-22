@@ -47,9 +47,9 @@ function BillingPage() {
     });
 
   const save = () => {
-    if (!form.patientId) return toast.error("Select a patient");
+    if (!form.patientId) { toast.error("Select a patient"); return; }
     const cleaned = items.filter((i) => i.description.trim());
-    if (cleaned.length === 0) return toast.error("Add at least one line item");
+    if (cleaned.length === 0) { toast.error("Add at least one line item"); return; }
     upsert<Bill>("bills", {
       ...form,
       items: cleaned,

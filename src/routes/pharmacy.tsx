@@ -33,8 +33,8 @@ function PharmPage() {
   const rows = useMemo(() => sortByDateDesc(Object.values(state.pharms)), [state.pharms]);
 
   const save = () => {
-    if (!form.patientId) return toast.error("Select a patient");
-    if (!form.medication?.trim()) return toast.error("Medication name is required");
+    if (!form.patientId) { toast.error("Select a patient"); return; }
+    if (!form.medication?.trim()) { toast.error("Medication name is required"); return; }
     upsert<Pharm>("pharms", { ...form, qty: Number(form.qty || 0), rate: Number(form.rate || 0) } as Pharm);
     toast.success(form.id ? "Entry updated" : "Entry added");
     setOpen(false);
