@@ -11,7 +11,7 @@ import { Button, Card, DataTable, Field, Input, Modal, PageHeader, Select, Td, T
 import { confirmDelete } from "@/components/hms/pickers";
 
 export const Route = createFileRoute("/patients/")({
-  validateSearch: (search: Record<string, unknown>) => ({ q: (search.q as string) || "" }),
+  validateSearch: (search: Record<string, unknown>) => ({ q: (search['q'] as string) || "" }),
   head: () => ({
     meta: [
       { title: "Patients — KEGH HMS" },
@@ -52,8 +52,8 @@ function PatientsPage() {
   const set = (k: keyof Patient, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
-    if (!form.name?.trim()) return toast.error("Patient name is required");
-    if (!form.dob) return toast.error("Date of birth is required");
+    if (!form.name?.trim()) { toast.error("Patient name is required"); return; }
+    if (!form.dob) { toast.error("Date of birth is required"); return; }
     upsert<Patient>("patients", { ...form, mrn: form.mrn || nextMrn(state) } as Patient);
     toast.success(form.id ? "Patient updated" : "Patient registered");
     setOpen(false);

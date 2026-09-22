@@ -30,8 +30,8 @@ export function autoFlag(result: string, range: string): LabFlag | null {
   const value = parseFloat(result);
   const m = range.match(/(-?\d+(?:\.\d+)?)\s*[-–to]+\s*(-?\d+(?:\.\d+)?)/i);
   if (Number.isNaN(value) || !m) return null;
-  const low = parseFloat(m[1]);
-  const high = parseFloat(m[2]);
+  const low = parseFloat(m[1]!);
+  const high = parseFloat(m[2]!);
   if (value < low) return value < low * 0.5 ? "critical" : "low";
   if (value > high) return value > high * 1.5 ? "critical" : "high";
   return "normal";
@@ -47,8 +47,8 @@ function LabPage() {
   const set = (k: keyof Lab, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
-    if (!form.patientId) return toast.error("Select a patient");
-    if (!form.testName?.trim()) return toast.error("Test name is required");
+    if (!form.patientId) { toast.error("Select a patient"); return; }
+    if (!form.testName?.trim()) { toast.error("Test name is required"); return; }
     upsert<Lab>("labs", form as Lab);
     toast.success(form.id ? "Result updated" : "Result added");
     setOpen(false);
@@ -106,7 +106,7 @@ function LabPage() {
               onChange={(e) => {
                 const result = e.target.value;
                 const auto = autoFlag(result, form.normalRange ?? "");
-                setForm((f) => ({ ...f, result, flag: auto ?? f.flag }));
+                setForm((f) => ({ ...f, result, flag: auto ?? f.flag ?? "normal" }));
               }}
             />
           </Field>
@@ -119,7 +119,7 @@ function LabPage() {
               onChange={(e) => {
                 const normalRange = e.target.value;
                 const auto = autoFlag(form.result ?? "", normalRange);
-                setForm((f) => ({ ...f, normalRange, flag: auto ?? f.flag }));
+                setForm((f) => ({ ...f, normalRange, flag: auto ?? f.flag ?? "normal" }));
               }}
             />
           </Field>

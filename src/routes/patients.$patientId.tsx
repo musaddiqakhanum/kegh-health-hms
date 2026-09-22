@@ -49,7 +49,7 @@ function Patient360() {
     return (
       <Card>
         <p className="text-sm text-muted-foreground">Patient not found.</p>
-        <Link to="/patients" className="mt-2 inline-block text-accent underline">
+        <Link to="/patients" search={{ q: "" }} className="mt-2 inline-block text-accent underline">
           Back to patients
         </Link>
       </Card>
@@ -82,7 +82,7 @@ function Patient360() {
         subtitle={`${patient.mrn} · ${ageFromDob(patient.dob)} · ${patient.gender}`}
         actions={
           <>
-            <Link to="/patients">
+            <Link to="/patients" search={{ q: "" }}>
               <Button variant="outline">
                 <ArrowLeft className="h-4 w-4" /> Back
               </Button>

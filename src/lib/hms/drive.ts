@@ -91,7 +91,7 @@ export async function ensureFolder(token: string, name: string): Promise<string>
   );
   const res = await api(token, `drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`);
   const data = (await res.json()) as { files: { id: string }[] };
-  if (data.files?.length) return data.files[0].id;
+  if (data.files?.length) return data.files[0]!.id;
   const created = await api(token, "drive/v3/files?fields=id", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
