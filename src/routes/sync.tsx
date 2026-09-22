@@ -12,9 +12,15 @@ export const Route = createFileRoute("/sync")({
   head: () => ({
     meta: [
       { title: "Google Drive Sync — KEGH HMS" },
-      { name: "description", content: "Sync hospital records across devices through your own Google Drive." },
+      {
+        name: "description",
+        content: "Sync hospital records across devices through your own Google Drive.",
+      },
       { property: "og:title", content: "Google Drive Sync — KEGH HMS" },
-      { property: "og:description", content: "Sync hospital records across devices through your own Google Drive." },
+      {
+        property: "og:description",
+        content: "Sync hospital records across devices through your own Google Drive.",
+      },
     ],
   }),
   component: SyncPage,
@@ -62,7 +68,12 @@ function SyncPage() {
         <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
           <li>
             Open{" "}
-            <a className="text-accent underline" href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">
+            <a
+              className="text-accent underline"
+              href="https://console.cloud.google.com/"
+              target="_blank"
+              rel="noreferrer"
+            >
               console.cloud.google.com
             </a>{" "}
             and create a project.
@@ -115,16 +126,33 @@ function SyncPage() {
         <h2 className="mb-3 font-semibold">Status</h2>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
           <p>
-            Connection: <Badge tone={connected ? "green" : "amber"}>{connected ? "Connected" : "Not connected"}</Badge>
+            Connection:{" "}
+            <Badge tone={connected ? "green" : "amber"}>
+              {connected ? "Connected" : "Not connected"}
+            </Badge>
           </p>
-          <p>Auto-sync: <strong>{settings.autoSync ? `every ${settings.syncIntervalMinutes} min` : "off"}</strong></p>
-          <p>Last sync: <strong>{fmtDateTime(settings.lastSyncAt)}</strong></p>
-          <p>Device files in folder: <strong>{settings.lastSyncFileCount}</strong></p>
-          <p>Encryption: <strong>{settings.encryptionEnabled ? "on (AES-256-GCM)" : "off"}</strong></p>
-          <p>This device: <strong>{settings.deviceName}</strong></p>
+          <p>
+            Auto-sync:{" "}
+            <strong>
+              {settings.autoSync ? `every ${settings.syncIntervalMinutes} min` : "off"}
+            </strong>
+          </p>
+          <p>
+            Last sync: <strong>{fmtDateTime(settings.lastSyncAt)}</strong>
+          </p>
+          <p>
+            Device files in folder: <strong>{settings.lastSyncFileCount}</strong>
+          </p>
+          <p>
+            Encryption: <strong>{settings.encryptionEnabled ? "on (AES-256-GCM)" : "off"}</strong>
+          </p>
+          <p>
+            This device: <strong>{settings.deviceName}</strong>
+          </p>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Each device writes its own compressed .keg file. Every sync merges all device files, newest change per record wins.
+          Each device writes its own compressed .keg file. Every sync merges all device files,
+          newest change per record wins.
         </p>
       </Card>
     </div>

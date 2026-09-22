@@ -134,7 +134,17 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ state, settings, ready, online, upsert, remove, replaceState, mergeIn, updateSettings }),
+    () => ({
+      state,
+      settings,
+      ready,
+      online,
+      upsert,
+      remove,
+      replaceState,
+      mergeIn,
+      updateSettings,
+    }),
     [state, settings, ready, online, upsert, remove, replaceState, mergeIn, updateSettings],
   );
 

@@ -13,9 +13,15 @@ export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings — KEGH HMS" },
-      { name: "description", content: "Hospital profile, device role, PIN lock, backups and encryption." },
+      {
+        name: "description",
+        content: "Hospital profile, device role, PIN lock, backups and encryption.",
+      },
       { property: "og:title", content: "Settings — KEGH HMS" },
-      { property: "og:description", content: "Hospital profile, device role, PIN lock, backups and encryption." },
+      {
+        property: "og:description",
+        content: "Hospital profile, device role, PIN lock, backups and encryption.",
+      },
     ],
   }),
   component: SettingsPage,
@@ -61,16 +67,28 @@ function SettingsPage() {
         <h2 className="font-semibold">Hospital profile</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Hospital name">
-            <Input value={settings.hospitalName} onChange={(e) => updateSettings({ hospitalName: e.target.value })} />
+            <Input
+              value={settings.hospitalName}
+              onChange={(e) => updateSettings({ hospitalName: e.target.value })}
+            />
           </Field>
           <Field label="Phone">
-            <Input value={settings.hospitalPhone} onChange={(e) => updateSettings({ hospitalPhone: e.target.value })} />
+            <Input
+              value={settings.hospitalPhone}
+              onChange={(e) => updateSettings({ hospitalPhone: e.target.value })}
+            />
           </Field>
           <Field label="Address" className="sm:col-span-2">
-            <Input value={settings.hospitalAddress} onChange={(e) => updateSettings({ hospitalAddress: e.target.value })} />
+            <Input
+              value={settings.hospitalAddress}
+              onChange={(e) => updateSettings({ hospitalAddress: e.target.value })}
+            />
           </Field>
           <Field label="Registration number">
-            <Input value={settings.registrationNumber} onChange={(e) => updateSettings({ registrationNumber: e.target.value })} />
+            <Input
+              value={settings.registrationNumber}
+              onChange={(e) => updateSettings({ registrationNumber: e.target.value })}
+            />
           </Field>
         </div>
       </Card>
@@ -79,11 +97,20 @@ function SettingsPage() {
         <h2 className="font-semibold">This device</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Device name">
-            <Input placeholder="Reception PC" value={settings.deviceName} onChange={(e) => updateSettings({ deviceName: e.target.value })} />
+            <Input
+              placeholder="Reception PC"
+              value={settings.deviceName}
+              onChange={(e) => updateSettings({ deviceName: e.target.value })}
+            />
           </Field>
           <Field label="Role">
-            <Select value={settings.role} onChange={(e) => updateSettings({ role: e.target.value as Role })}>
-              {ROLES.map((r) => <option key={r}>{r}</option>)}
+            <Select
+              value={settings.role}
+              onChange={(e) => updateSettings({ role: e.target.value as Role })}
+            >
+              {ROLES.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
             </Select>
           </Field>
         </div>
@@ -102,14 +129,24 @@ function SettingsPage() {
           </Field>
           <Button
             onClick={() => {
-              if (pin && pin.length !== 4) { toast.error("PIN must be 4 digits"); return; }
+              if (pin && pin.length !== 4) {
+                toast.error("PIN must be 4 digits");
+                return;
+              }
               updateSettings({ pin });
               toast.success(pin ? "PIN saved — required next time the app opens" : "PIN removed");
             }}
           >
             Save PIN
           </Button>
-          <Button variant="outline" onClick={() => { setPin(""); updateSettings({ pin: "" }); toast.success("PIN cleared"); }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setPin("");
+              updateSettings({ pin: "" });
+              toast.success("PIN cleared");
+            }}
+          >
             Clear PIN
           </Button>
         </div>
@@ -132,7 +169,9 @@ function SettingsPage() {
               type="number"
               min={1}
               value={settings.syncIntervalMinutes}
-              onChange={(e) => updateSettings({ syncIntervalMinutes: Math.max(1, Number(e.target.value)) })}
+              onChange={(e) =>
+                updateSettings({ syncIntervalMinutes: Math.max(1, Number(e.target.value)) })
+              }
             />
           </Field>
           <Field label="Encrypt backups (AES-256-GCM)">
@@ -148,7 +187,10 @@ function SettingsPage() {
             <Input
               type="password"
               value={pass}
-              onChange={(e) => { setPass(e.target.value); setPassphrase(e.target.value); }}
+              onChange={(e) => {
+                setPass(e.target.value);
+                setPassphrase(e.target.value);
+              }}
             />
           </Field>
         </div>
@@ -160,7 +202,9 @@ function SettingsPage() {
       <Card className="space-y-4">
         <h2 className="font-semibold">Manual backup</h2>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={exportKeg}><Download className="h-4 w-4" /> Export .keg</Button>
+          <Button onClick={exportKeg}>
+            <Download className="h-4 w-4" /> Export .keg
+          </Button>
           <Button variant="outline" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4" /> Import &amp; merge .keg
           </Button>
