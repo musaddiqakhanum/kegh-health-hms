@@ -5,10 +5,9 @@ const COLLECTIONS: Collection[] = ["patients", "visits", "labs", "rads", "pharms
 /** Merge two states: newest write per record wins; tombstones respected. */
 export function mergeStates(a: HmsState, b: HmsState): HmsState {
   const out = emptyState();
-  out.ops = { ...a.ops, ...b.ops };
-  for (const k of Object.keys(a.ops)) {
-    if ((b.ops[k] ?? 0) > (a.ops[k] ?? 0)) out.ops[k] = b.ops[k];
-    else out.ops[k] = a.ops[k];
+  out.ops = { ...a.ops };
+  for (const [k, t] of Object.entries(b.ops ?? {})) {
+    out.ops[k] = Math.max(out.ops[k] ?? 0, t);
   }
   out.deleted = { ...a.deleted };
   for (const [k, t] of Object.entries(b.deleted ?? {})) {

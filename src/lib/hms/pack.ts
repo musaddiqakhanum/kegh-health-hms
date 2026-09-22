@@ -47,7 +47,7 @@ export async function packState(state: HmsState, passphrase?: string): Promise<U
 export async function unpackState(bytes: Uint8Array, passphrase?: string): Promise<HmsState> {
   const magic = new TextDecoder().decode(bytes.slice(0, 4));
   if (magic === MAGIC_PLAIN) {
-    return JSON.parse(inflate(bytes.slice(4), { to: "string" })) as HmsState;
+    return JSON.parse(new TextDecoder().decode(inflate(bytes.slice(4)))) as HmsState;
   }
   if (magic === MAGIC_ENC) {
     if (!passphrase) throw new Error("This file is encrypted — enter the passphrase in Settings.");
@@ -62,7 +62,7 @@ export async function unpackState(bytes: Uint8Array, passphrase?: string): Promi
         cipher as BufferSource,
       ),
     );
-    return JSON.parse(inflate(plain, { to: "string" })) as HmsState;
+    return JSON.parse(new TextDecoder().decode(inflate(plain))) as HmsState;
   }
   // fall back to raw JSON
   return JSON.parse(new TextDecoder().decode(bytes)) as HmsState;

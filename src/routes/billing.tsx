@@ -40,7 +40,7 @@ function BillingPage() {
   const setItem = (idx: number, patch: Partial<BillItem>) =>
     setForm((f) => {
       const next = [...(f.items ?? [])];
-      const merged = { ...next[idx], ...patch };
+      const merged: BillItem = { ...blankItem(), ...next[idx], ...patch };
       merged.amount = Number(merged.qty || 0) * Number(merged.rate || 0);
       next[idx] = merged;
       return { ...f, items: next };

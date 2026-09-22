@@ -3,6 +3,7 @@ import { Printer, X } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
 import { fmtDate } from "@/lib/hms/format";
 import { Button } from "./ui";
+import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
 export function PrintOverlay({
   open,
@@ -37,15 +38,18 @@ export function PrintOverlay({
           </Button>
         </div>
 
-        <header className="mb-5 border-b-2 border-slate-800 pb-3 text-center">
+        <header className="mb-5 flex items-center gap-4 border-b-2 border-slate-800 pb-3">
+          <img src={keghLogo.url} alt="" width={64} height={64} className="h-16 w-16 object-contain" />
+          <div className="flex-1 text-center">
           <h1 className="text-xl font-bold uppercase tracking-wide">
-            {settings.hospitalName || "KEGH Hospital"}
+            {settings.hospitalName || "KEGH LLP"}
           </h1>
           {settings.hospitalAddress ? <p className="text-sm">{settings.hospitalAddress}</p> : null}
           <p className="text-sm">
             {settings.hospitalPhone ? `Phone: ${settings.hospitalPhone}` : ""}
             {settings.registrationNumber ? ` · Reg. No: ${settings.registrationNumber}` : ""}
           </p>
+          </div>
         </header>
 
         <div className="mb-4 flex items-baseline justify-between">

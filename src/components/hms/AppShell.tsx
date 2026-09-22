@@ -6,17 +6,17 @@ import { useHms } from "@/lib/hms/store";
 import { getStoredToken } from "@/lib/hms/drive";
 import { runSync } from "@/lib/hms/sync";
 import { navForRole } from "./nav";
+import { registerAppServiceWorker } from "@/lib/hms/register-sw";
 import { Button, Input } from "./ui";
 import { cn } from "@/lib/utils";
+import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
 function PinLock({ pin, onUnlock, onForgot }: { pin: string; onUnlock: () => void; onForgot: () => void }) {
   const [value, setValue] = useState("");
   return (
     <div className="flex min-h-screen items-center justify-center sidebar-gradient px-4">
       <div className="w-full max-w-xs rounded-lg bg-white p-6 text-center shadow-xl">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0b3a44] text-lg font-bold text-white">
-          K
-        </div>
+        <img src={keghLogo.url} alt="KEGH LLP" width={56} height={56} className="mx-auto mb-3 h-14 w-14 object-contain" />
         <h1 className="text-lg font-semibold text-[#0b3a44]">KEGH HMS</h1>
         <p className="mb-4 text-sm text-slate-500">Enter your 4-digit PIN</p>
         <Input
@@ -60,6 +60,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => setDrawer(false), [pathname]);
 
   useEffect(() => {
+    registerAppServiceWorker();
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
         e.preventDefault();
@@ -93,7 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center sidebar-gradient">
-        <div className="animate-pulse text-3xl font-bold tracking-widest text-white">KEGH</div>
+        <img src={keghLogo.url} alt="KEGH LLP" width={96} height={96} className="h-24 w-24 animate-pulse rounded-xl bg-white p-2" />
       </div>
     );
   }
@@ -117,9 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const sidebar = (
     <aside className="sidebar-gradient flex h-full w-[236px] shrink-0 flex-col text-white">
       <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-lg font-bold">
-          K
-        </div>
+        <img src={keghLogo.url} alt="KEGH LLP" width={40} height={40} className="h-10 w-10 rounded-lg bg-white object-contain p-0.5" />
         <div>
           <p className="text-lg font-bold leading-tight">KEGH</p>
           <p className="text-xs text-white/70">Health Records</p>

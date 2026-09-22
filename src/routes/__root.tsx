@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { HmsProvider } from "@/lib/hms/store";
 import { AppShell } from "@/components/hms/AppShell";
+import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
 function NotFoundComponent() {
   return (
@@ -89,7 +90,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/icon-192.png" },
     ],
@@ -117,7 +118,10 @@ function RootShell({ children }: { children: ReactNode }) {
 function Splash() {
   return (
     <div className="flex min-h-screen items-center justify-center sidebar-gradient">
-      <div className="animate-pulse text-3xl font-bold tracking-widest text-white">KEGH</div>
+      <div className="flex flex-col items-center gap-3">
+        <img src={keghLogo.url} alt="KEGH LLP" width={96} height={96} className="h-24 w-24 animate-pulse rounded-xl bg-white p-2" />
+        <p className="text-sm font-semibold tracking-[0.3em] text-white/80">KEGH LLP</p>
+      </div>
     </div>
   );
 }
