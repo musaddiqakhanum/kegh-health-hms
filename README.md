@@ -8,12 +8,12 @@ Each entity has a unique id (crypto.randomUUID). Store all data in a single stat
 text
 
 {
-  patients: { [id]: { id, name, mrn, dob, gender, phone, address, fatherName, bloodGroup, allergies, createdAt } },
-  visits:   { [id]: { id, patientId, date, type:"OPD"|"IPD"|"Emergency", doctor, department, diagnosis, notes, admissionDate, dischargeDate, createdAt } },
-  labs:     { [id]: { id, patientId, visitId, date, testName, result, unit, normalRange, flag:"normal"|"high"|"low"|"critical", technician, createdAt } },
-  rads:     { [id]: { id, patientId, visitId, date, studyType, findings, impression, radiologist, createdAt } },
-  pharms:   { [id]: { id, patientId, visitId, date, medication, dosage, frequency, duration, qty, rate, createdAt } },
-  bills:    { [id]: { id, patientId, visitId, date, items:[{description,qty,rate,amount}], totalAmount, paid, due, paymentMode, createdAt } }
+patients: { [id]: { id, name, mrn, dob, gender, phone, address, fatherName, bloodGroup, allergies, createdAt } },
+visits: { [id]: { id, patientId, date, type:"OPD"|"IPD"|"Emergency", doctor, department, diagnosis, notes, admissionDate, dischargeDate, createdAt } },
+labs: { [id]: { id, patientId, visitId, date, testName, result, unit, normalRange, flag:"normal"|"high"|"low"|"critical", technician, createdAt } },
+rads: { [id]: { id, patientId, visitId, date, studyType, findings, impression, radiologist, createdAt } },
+pharms: { [id]: { id, patientId, visitId, date, medication, dosage, frequency, duration, qty, rate, createdAt } },
+bills: { [id]: { id, patientId, visitId, date, items:[{description,qty,rate,amount}], totalAmount, paid, due, paymentMode, createdAt } }
 }
 MRN (Medical Record Number) format
 Auto-generate as KEGH/YY/NNNN where YY is the last 2 digits of the current year and NNNN is a zero-padded sequential number (0001, 0002, etc.), continuing from the highest existing MRN for that year.

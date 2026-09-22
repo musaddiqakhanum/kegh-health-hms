@@ -37,7 +37,8 @@ export function dashboardStats(state: HmsState) {
     collectionToday: bills
       .filter((b) => isSameDay(b.date, today))
       .reduce((s, b) => s + Number(b.paid || 0), 0),
-    admitted: Object.values(state.visits).filter((v) => v.type === "IPD" && !v.dischargeDate).length,
+    admitted: Object.values(state.visits).filter((v) => v.type === "IPD" && !v.dischargeDate)
+      .length,
     collectionAll: bills.reduce((s, b) => s + Number(b.paid || 0), 0),
   };
 }
@@ -58,7 +59,8 @@ export function inRange(dateStr: string, range: RangeKey): boolean {
   if (Number.isNaN(d.getTime())) return false;
   const now = new Date();
   if (range === "today") return isSameDay(dateStr);
-  if (range === "month") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (range === "month")
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   const days = Number(range);
   const cutoff = new Date();
   cutoff.setDate(now.getDate() - days);
