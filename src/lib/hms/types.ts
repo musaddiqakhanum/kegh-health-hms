@@ -139,7 +139,7 @@ export const emptyState = (): HmsState => ({
 });
 
 export const defaultSettings = (): Settings => ({
-  hospitalName: "KEGH Hospital",
+  hospitalName: "KEGH LLP",
   hospitalAddress: "",
   hospitalPhone: "",
   registrationNumber: "",

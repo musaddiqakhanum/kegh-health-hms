@@ -57,7 +57,7 @@ function Dashboard() {
       />
 
       <Card className="sidebar-gradient text-white">
-        <h2 className="text-xl font-bold">{settings.hospitalName || "KEGH Hospital"}</h2>
+        <h2 className="text-xl font-bold">{settings.hospitalName || "KEGH LLP"}</h2>
         <p className="mt-1 text-sm text-white/80">{settings.hospitalAddress || "Add your hospital address in Settings"}</p>
         <p className="text-sm text-white/80">
           {settings.hospitalPhone ? `Phone: ${settings.hospitalPhone}` : "Add a phone number in Settings"}
