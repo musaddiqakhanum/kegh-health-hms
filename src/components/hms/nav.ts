@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CalendarDays,
   Cloud,
   FlaskConical,
   IndianRupee,
@@ -23,6 +24,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, key: "dash" },
   { to: "/patients", label: "Patients", icon: Users, key: "patients" },
+  { to: "/appointments", label: "Appointments", icon: CalendarDays, key: "appointments" },
   { to: "/visits", label: "Visits (OPD/IPD)", icon: Stethoscope, key: "visits" },
   { to: "/laboratory", label: "Laboratory", icon: FlaskConical, key: "labs" },
   { to: "/radiology", label: "Radiology", icon: Scan, key: "rads" },
@@ -35,11 +37,30 @@ export const NAV_ITEMS: NavItem[] = [
 
 const ROLE_KEYS: Record<Role, string[] | "all"> = {
   Admin: "all",
-  Reception: ["dash", "patients", "visits", "billing", "reports", "settings"],
-  Doctor: ["dash", "patients", "visits", "labs", "rads", "pharms", "settings"],
-  Lab: ["dash", "patients", "labs", "reports", "settings"],
-  Pharmacy: ["dash", "patients", "pharms", "reports", "settings"],
-  Billing: ["dash", "patients", "billing", "reports", "settings"],
+  Reception: [
+    "dash",
+    "patients",
+    "appointments",
+    "visits",
+    "billing",
+    "reports",
+    "settings",
+    "sync",
+  ],
+  Doctor: [
+    "dash",
+    "patients",
+    "appointments",
+    "visits",
+    "labs",
+    "rads",
+    "pharms",
+    "reports",
+    "settings",
+  ],
+  Lab: ["dash", "patients", "labs", "reports", "settings", "sync"],
+  Pharmacy: ["dash", "patients", "pharms", "reports", "settings", "sync"],
+  Billing: ["dash", "patients", "appointments", "billing", "reports", "settings", "sync"],
 };
 
 export function navForRole(role: Role): NavItem[] {

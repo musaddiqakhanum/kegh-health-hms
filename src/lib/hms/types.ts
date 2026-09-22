@@ -92,7 +92,25 @@ export interface Bill {
   createdAt: number;
 }
 
-export type Collection = "patients" | "visits" | "labs" | "rads" | "pharms" | "bills";
+export type AppointmentType = "OPD" | "Follow-up" | "Consultation" | "IPD" | "Emergency";
+export type AppointmentStatus =
+  "Scheduled" | "Confirmed" | "CheckedIn" | "Completed" | "Cancelled" | "NoShow";
+
+export interface Appointment {
+  id: ID;
+  patientId: ID;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  doctor: string;
+  department: string;
+  type: AppointmentType;
+  status: AppointmentStatus;
+  notes: string;
+  createdAt: number;
+}
+
+export type Collection =
+  "patients" | "visits" | "labs" | "rads" | "pharms" | "bills" | "appointments";
 
 export interface HmsState {
   patients: Record<ID, Patient>;
@@ -101,6 +119,7 @@ export interface HmsState {
   rads: Record<ID, Rad>;
   pharms: Record<ID, Pharm>;
   bills: Record<ID, Bill>;
+  appointments: Record<ID, Appointment>;
   /** operation log: `${collection}:${id}` -> last write timestamp (ms) */
   ops: Record<string, number>;
   /** tombstones for deleted records: `${collection}:${id}` -> deletion timestamp */
@@ -134,6 +153,7 @@ export const emptyState = (): HmsState => ({
   rads: {},
   pharms: {},
   bills: {},
+  appointments: {},
   ops: {},
   deleted: {},
 });

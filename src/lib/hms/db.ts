@@ -8,7 +8,23 @@ export async function loadState(): Promise<HmsState> {
   try {
     const raw = (await get<HmsState>(KEY, store)) ?? null;
     if (!raw) return emptyState();
-    return { ...emptyState(), ...raw };
+    const base = emptyState();
+    // Ensure new collections exist for older stored states
+    return {
+      ...base,
+      ...raw,
+      patients: (raw as HmsState).patients ?? base.patients,
+      visits: (raw as HmsState).visits ?? base.visits,
+      labs: (raw as HmsState).labs ?? base.labs,
+      rads: (raw as HmsState).rads ?? base.rads,
+      pharms: (raw as HmsState).pharms ?? base.pharms,
+      bills: (raw as HmsState).bills ?? base.bills,
+      appointments:
+        (raw as HmsState & { appointments?: HmsState["appointments"] }).appointments ??
+        base.appointments,
+      ops: (raw as HmsState).ops ?? base.ops,
+      deleted: (raw as HmsState).deleted ?? base.deleted,
+    };
   } catch {
     return emptyState();
   }
