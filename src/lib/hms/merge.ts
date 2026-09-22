@@ -8,6 +8,8 @@ const COLLECTIONS: Collection[] = [
   "pharms",
   "bills",
   "appointments",
+  "doctorSchedules",
+  "auditLogs",
 ];
 
 /** Merge two states: newest write per record wins; tombstones respected. */

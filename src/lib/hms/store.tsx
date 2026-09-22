@@ -12,6 +12,8 @@ import { mergeStates } from "./merge";
 import {
   defaultSettings,
   emptyState,
+  type AuditAction,
+  type AuditLog,
   type Collection,
   type HmsState,
   type Settings,
@@ -35,6 +37,46 @@ interface StoreCtx {
 
 const Ctx = createContext<StoreCtx | null>(null);
 
+/** Max audit entries kept per device; oldest beyond this are pruned with tombstones. */
+const MAX_AUDIT = 1000;
+
+function appendAudit(
+  prev: HmsState,
+  action: AuditAction,
+  collection: Collection,
+  recordId: string,
+  now: number,
+  deviceName: string,
+  role: string,
+): HmsState {
+  const id = crypto.randomUUID();
+  const entry: AuditLog = {
+    id,
+    action,
+    collection,
+    recordId,
+    timestamp: now,
+    deviceName,
+    role,
+    createdAt: now,
+  };
+  const auditLogs = { ...(prev.auditLogs ?? {}), [id]: entry };
+  const ops = { ...prev.ops, [`auditLogs:${id}`]: now };
+  const ids = Object.keys(auditLogs);
+  if (ids.length <= MAX_AUDIT) return { ...prev, auditLogs, ops };
+  const sorted = Object.values(auditLogs).sort(
+    (a, b) => a.timestamp - b.timestamp || a.createdAt - b.createdAt,
+  );
+  const overflow = sorted.slice(0, ids.length - MAX_AUDIT);
+  const pruned = { ...auditLogs };
+  const deleted = { ...prev.deleted };
+  for (const e of overflow) {
+    delete pruned[e.id];
+    deleted[`auditLogs:${e.id}`] = now;
+  }
+  return { ...prev, auditLogs: pruned, ops, deleted };
+}
+
 function readSettings(): Settings {
   const base = defaultSettings();
   if (typeof window === "undefined") return base;
@@ -56,6 +98,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   const [online, setOnline] = useState(true);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +135,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       const id = record.id ?? crypto.randomUUID();
       const prev = stateRef.current;
       const existing = (prev[collection] as Record<string, Rec>)[id];
-      const next: HmsState = {
+      let next: HmsState = {
         ...prev,
         [collection]: {
           ...prev[collection],
@@ -99,6 +143,18 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
         },
         ops: { ...prev.ops, [`${collection}:${id}`]: now },
       };
+      if (collection !== "auditLogs") {
+        const s = settingsRef.current;
+        next = appendAudit(
+          next,
+          existing ? "update" : "create",
+          collection,
+          id,
+          now,
+          s.deviceName || "This Device",
+          s.role,
+        );
+      }
       persist(next);
       return id;
     },
@@ -107,14 +163,28 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
 
   const remove = useCallback<StoreCtx["remove"]>(
     (collection, id) => {
+      const now = Date.now();
       const prev = stateRef.current;
       const copy = { ...(prev[collection] as Record<string, unknown>) };
       delete copy[id];
-      persist({
+      let next: HmsState = {
         ...prev,
         [collection]: copy,
-        deleted: { ...prev.deleted, [`${collection}:${id}`]: Date.now() },
-      });
+        deleted: { ...prev.deleted, [`${collection}:${id}`]: now },
+      };
+      if (collection !== "auditLogs") {
+        const s = settingsRef.current;
+        next = appendAudit(
+          next,
+          "delete",
+          collection,
+          id,
+          now,
+          s.deviceName || "This Device",
+          s.role,
+        );
+      }
+      persist(next);
     },
     [persist],
   );
