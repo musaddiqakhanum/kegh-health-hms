@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Printer } from "lucide-react";
+import { ArrowLeft, CalendarDays, Download, Printer } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
 import { ageFromDob, fmtDate, money } from "@/lib/hms/format";
 import { sortByDateDesc } from "@/lib/hms/selectors";
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/patients/$patientId")({
       {
         name: "description",
         content:
-          "Complete 360° patient record across visits, lab, radiology, pharmacy and billing.",
+          "Complete 360° patient record across visits, appointments, lab, radiology, pharmacy and billing.",
       },
       { property: "og:title", content: "Patient record — KEGH HMS" },
       {
@@ -43,6 +43,13 @@ function Patient360() {
   const rads = Object.values(state.rads).filter((r) => r.patientId === patientId);
   const pharms = Object.values(state.pharms).filter((p) => p.patientId === patientId);
   const bills = Object.values(state.bills).filter((b) => b.patientId === patientId);
+  const appointments = useMemo(
+    () =>
+      sortByDateDesc(
+        Object.values(state.appointments ?? {}).filter((a) => a.patientId === patientId) as never,
+      ) as (typeof state.appointments)[keyof typeof state.appointments][],
+    [state.appointments, patientId],
+  );
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -65,6 +72,9 @@ function Patient360() {
   const exportCsv = () => {
     const rows: (string | number)[][] = [["Section", "Date", "Detail 1", "Detail 2", "Detail 3"]];
     visits.forEach((v) => rows.push(["Visit", v.date, v.type, v.doctor, v.diagnosis]));
+    appointments.forEach((a) =>
+      rows.push(["Appointment", a.date, `${a.time} ${a.type}`, a.doctor, a.status]),
+    );
     labs.forEach((l) => rows.push(["Lab", l.date, l.testName, `${l.result} ${l.unit}`, l.flag]));
     rads.forEach((r) => rows.push(["Radiology", r.date, r.studyType, r.impression, r.radiologist]));
     pharms.forEach((p) =>
@@ -128,8 +138,9 @@ function Patient360() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
+          ["Appointments", appointments.length],
           ["Total billed", money(totals.billed)],
           ["Paid", money(totals.paid)],
           ["Due", money(totals.due)],
@@ -143,6 +154,11 @@ function Patient360() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Link to="/appointments">
+          <Button variant="outline">
+            <CalendarDays className="h-4 w-4" /> Add appointment
+          </Button>
+        </Link>
         <Link to="/visits">
           <Button variant="outline">Add visit</Button>
         </Link>
@@ -159,6 +175,39 @@ function Patient360() {
           <Button variant="outline">Add bill</Button>
         </Link>
       </div>
+
+      {appointments.length > 0 && (
+        <Card>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <CalendarDays className="h-4 w-4" /> Appointments ({appointments.length})
+          </h3>
+          <div className="space-y-2">
+            {appointments.map((a) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center gap-3 rounded-md bg-muted/50 px-3 py-2 text-sm"
+              >
+                <span className="font-medium">{fmtDate(a.date)}</span>
+                <span className="text-muted-foreground">{a.time || "—"}</span>
+                <Badge tone={a.type === "Emergency" ? "red" : "neutral"}>{a.type}</Badge>
+                <span>{a.doctor || "—"}</span>
+                <Badge
+                  tone={
+                    a.status === "Completed" || a.status === "Confirmed"
+                      ? "green"
+                      : a.status === "Cancelled" || a.status === "NoShow"
+                        ? "red"
+                        : "amber"
+                  }
+                >
+                  {a.status}
+                </Badge>
+                {a.notes ? <span className="text-muted-foreground">{a.notes}</span> : null}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="space-y-4">
         {visits.length === 0 ? (
@@ -281,6 +330,30 @@ function Patient360() {
               <th>Allergies</th>
               <td>{patient.allergies || "None"}</td>
             </tr>
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 font-semibold">Appointments</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Doctor</th>
+              <th>Type</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {appointments.map((a) => (
+              <tr key={a.id}>
+                <td>{fmtDate(a.date)}</td>
+                <td>{a.time}</td>
+                <td>{a.doctor}</td>
+                <td>{a.type}</td>
+                <td>{a.status}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
 

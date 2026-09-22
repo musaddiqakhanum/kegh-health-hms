@@ -2,10 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Download, Printer } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
-import { RANGE_LABELS, inRange, type RangeKey } from "@/lib/hms/selectors";
+import {
+  RANGE_LABELS,
+  inRange,
+  type RangeKey,
+  billPaymentStatus,
+  type PaymentStatus,
+} from "@/lib/hms/selectors";
 import { fmtDate, money } from "@/lib/hms/format";
 import { downloadCsv } from "@/lib/hms/csv";
-import { Button, Card, Field, PageHeader, Select } from "@/components/hms/ui";
+import { Button, Card, Field, PageHeader, Select, Badge } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 import { PatientPicker } from "@/components/hms/pickers";
 
@@ -15,35 +21,41 @@ export const Route = createFileRoute("/reports")({
       { title: "Reports — KEGH HMS" },
       {
         name: "description",
-        content: "Section-wise and patient-wise hospital reports with print and CSV export.",
+        content:
+          "Section-wise, paid/collections, appointments and patient-wise hospital reports with print and CSV export.",
       },
       { property: "og:title", content: "Reports — KEGH HMS" },
       {
         property: "og:description",
-        content: "Section-wise and patient-wise hospital reports with print and CSV export.",
+        content: "Hospital reports including paid collections and operational summaries.",
       },
     ],
   }),
   component: ReportsPage,
 });
 
-type Section = "labs" | "bills" | "pharms" | "rads";
+type Section = "labs" | "bills" | "pharms" | "rads" | "appointments";
 const SECTION_LABELS: Record<Section, string> = {
   labs: "Laboratory",
   bills: "Billing",
   pharms: "Pharmacy",
   rads: "Radiology",
+  appointments: "Appointments",
 };
+
+type PaidStatusFilter = PaymentStatus | "All";
+type ModeFilter = "All" | "Cash" | "UPI" | "Card" | "Insurance";
 
 function ReportsPage() {
   const { state } = useHms();
   const [section, setSection] = useState<Section>("labs");
   const [range, setRange] = useState<RangeKey>("today");
   const [patientId, setPatientId] = useState("");
-  const [printKind, setPrintKind] = useState<"section" | "patient" | null>(null);
+  const [printKind, setPrintKind] = useState<"section" | "patient" | "paid" | null>(null);
 
+  // Section-wise
   const rows = useMemo(() => {
-    const list = Object.values(state[section] as Record<string, { date: string }>);
+    const list = Object.values((state[section] ?? {}) as Record<string, { date: string }>);
     return list.filter((r) => inRange(r.date, range));
   }, [state, section, range]);
 
@@ -101,6 +113,30 @@ function ReportsPage() {
         ],
       };
     }
+    if (section === "appointments") {
+      const r = rows as unknown as (typeof state.appointments)[string][];
+      return {
+        head: ["Date", "Time", "Patient", "Doctor", "Type", "Status"],
+        body: r.map((x) => [
+          fmtDate(x.date),
+          x.time || "—",
+          name(x.patientId),
+          x.doctor || "—",
+          x.type,
+          x.status,
+        ]),
+        summary: [
+          ["Total appointments", String(r.length)],
+          ["Scheduled", String(r.filter((x) => x.status === "Scheduled").length)],
+          ["Confirmed", String(r.filter((x) => x.status === "Confirmed").length)],
+          ["Completed", String(r.filter((x) => x.status === "Completed").length)],
+          [
+            "Cancelled / NoShow",
+            String(r.filter((x) => x.status === "Cancelled" || x.status === "NoShow").length),
+          ],
+        ],
+      };
+    }
     const r = rows as unknown as (typeof state.bills)[string][];
     const modes = ["Cash", "UPI", "Card", "Insurance"];
     return {
@@ -126,6 +162,40 @@ function ReportsPage() {
     };
   }, [rows, section, state]);
 
+  // Paid / Collections report
+  const [paidRange, setPaidRange] = useState<RangeKey>("today");
+  const [paidStatus, setPaidStatus] = useState<PaidStatusFilter>("All");
+  const [paidMode, setPaidMode] = useState<ModeFilter>("All");
+
+  const paidRows = useMemo(() => {
+    let list = Object.values(state.bills).filter((b) => inRange(b.date, paidRange));
+    if (paidStatus !== "All") list = list.filter((b) => billPaymentStatus(b) === paidStatus);
+    if (paidMode !== "All") list = list.filter((b) => b.paymentMode === paidMode);
+    return list.sort((a, b) => b.date.localeCompare(a.date));
+  }, [state.bills, paidRange, paidStatus, paidMode]);
+
+  const paidSummary = useMemo(() => {
+    const billed = paidRows.reduce((s, b) => s + Number(b.totalAmount || 0), 0);
+    const collected = paidRows.reduce((s, b) => s + Number(b.paid || 0), 0);
+    const outstanding = paidRows.reduce((s, b) => s + Number(b.due || 0), 0);
+    const efficiency = billed > 0 ? (collected / billed) * 100 : 0;
+    const byMode = ["Cash", "UPI", "Card", "Insurance"].map((m) => ({
+      mode: m,
+      collected: paidRows
+        .filter((b) => b.paymentMode === m)
+        .reduce((s, b) => s + Number(b.paid || 0), 0),
+      count: paidRows.filter((b) => b.paymentMode === m).length,
+    }));
+    const byStatus = (["Paid", "Partial", "Due"] as PaymentStatus[]).map((s) => ({
+      status: s,
+      count: paidRows.filter((b) => billPaymentStatus(b) === s).length,
+      amount: paidRows
+        .filter((b) => billPaymentStatus(b) === s)
+        .reduce((sum, b) => sum + Number(b.totalAmount || 0), 0),
+    }));
+    return { billed, collected, outstanding, efficiency, byMode, byStatus, count: paidRows.length };
+  }, [paidRows]);
+
   const patient = patientId ? state.patients[patientId] : null;
   const pData = useMemo(() => {
     if (!patientId) return null;
@@ -135,11 +205,29 @@ function ReportsPage() {
       rads: Object.values(state.rads).filter((r) => r.patientId === patientId),
       pharms: Object.values(state.pharms).filter((p) => p.patientId === patientId),
       bills: Object.values(state.bills).filter((b) => b.patientId === patientId),
+      appointments: Object.values(state.appointments ?? {}).filter(
+        (a) => a.patientId === patientId,
+      ),
     };
   }, [state, patientId]);
 
   const exportSectionCsv = () =>
     downloadCsv(`${section}-${range}-report.csv`, [sectionTable.head, ...sectionTable.body]);
+
+  const exportPaidCsv = () => {
+    const head = ["Date", "Patient", "MRN", "Total", "Paid", "Due", "Mode", "Status"];
+    const body = paidRows.map((b) => [
+      b.date,
+      state.patients[b.patientId]?.name ?? "—",
+      state.patients[b.patientId]?.mrn ?? "—",
+      String(b.totalAmount),
+      String(b.paid),
+      String(b.due),
+      b.paymentMode,
+      billPaymentStatus(b),
+    ]);
+    downloadCsv(`paid-${paidRange}-${paidStatus}-${paidMode}.csv`, [head, ...body]);
+  };
 
   const exportPatientCsv = () => {
     if (!pData || !patient) return;
@@ -155,12 +243,153 @@ function ReportsPage() {
       out.push(["Pharmacy", p.date, p.medication, p.qty, p.qty * p.rate]),
     );
     pData.bills.forEach((b) => out.push(["Bill", b.date, b.totalAmount, b.paid, b.due]));
+    pData.appointments.forEach((a) => out.push(["Appointment", a.date, a.time, a.type, a.status]));
     downloadCsv(`${patient.mrn.replace(/\//g, "-")}-report.csv`, out);
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports" subtitle="Section-wise and patient-wise summaries" />
+      <PageHeader
+        title="Reports"
+        subtitle="Section-wise, paid/collections, appointments and patient-wise summaries"
+      />
+
+      {/* Paid / Collections Report */}
+      <Card>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Paid & collections report
+          </h2>
+          <Badge tone="green">Paid HMS report</Badge>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Filter by date, payment status (Paid / Partial / Due) and payment mode. This is the
+          primary billing reconciliation report for Reception, Billing and Admin portals.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Field label="Date range">
+            <Select value={paidRange} onChange={(e) => setPaidRange(e.target.value as RangeKey)}>
+              {Object.entries(RANGE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Payment status">
+            <Select
+              value={paidStatus}
+              onChange={(e) => setPaidStatus(e.target.value as PaidStatusFilter)}
+            >
+              <option value="All">All</option>
+              <option value="Paid">Paid</option>
+              <option value="Partial">Partial</option>
+              <option value="Due">Due</option>
+            </Select>
+          </Field>
+          <Field label="Payment mode">
+            <Select value={paidMode} onChange={(e) => setPaidMode(e.target.value as ModeFilter)}>
+              <option value="All">All modes</option>
+              <option>Cash</option>
+              <option>UPI</option>
+              <option>Card</option>
+              <option>Insurance</option>
+            </Select>
+          </Field>
+          <div className="flex items-end gap-2">
+            <Button onClick={() => setPrintKind("paid")}>
+              <Printer className="h-4 w-4" /> Print
+            </Button>
+            <Button variant="outline" onClick={exportPaidCsv}>
+              <Download className="h-4 w-4" /> CSV
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Bills</p>
+            <p className="text-base font-semibold">{paidSummary.count}</p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Billed</p>
+            <p className="text-base font-semibold">{money(paidSummary.billed)}</p>
+          </div>
+          <div className="rounded-md bg-emerald-50 px-3 py-2">
+            <p className="text-xs text-muted-foreground">Collected (Paid)</p>
+            <p className="text-base font-semibold text-emerald-700">
+              {money(paidSummary.collected)}
+            </p>
+          </div>
+          <div className="rounded-md bg-amber-50 px-3 py-2">
+            <p className="text-xs text-muted-foreground">Outstanding</p>
+            <p className="text-base font-semibold text-amber-700">
+              {money(paidSummary.outstanding)}
+            </p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Collection efficiency</p>
+            <p className="text-base font-semibold">{paidSummary.efficiency.toFixed(1)}%</p>
+          </div>
+          {paidSummary.byStatus.map((s) => (
+            <div key={s.status} className="rounded-md bg-muted px-3 py-2">
+              <p className="text-xs text-muted-foreground">{s.status}</p>
+              <p className="text-base font-semibold">
+                {s.count} · {money(s.amount)}
+              </p>
+            </div>
+          ))}
+          {paidSummary.byMode.map((m) => (
+            <div key={m.mode} className="rounded-md bg-muted px-3 py-2">
+              <p className="text-xs text-muted-foreground">Via {m.mode}</p>
+              <p className="text-base font-semibold">
+                {m.count} · {money(m.collected)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 max-h-80 overflow-auto rounded-md ring-1 ring-border/60">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="sticky top-0 bg-secondary">
+              <tr>
+                {["Date", "Patient", "Total", "Paid", "Due", "Mode", "Status"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+              {paidRows.map((b) => {
+                const status = billPaymentStatus(b);
+                return (
+                  <tr key={b.id}>
+                    <td className="px-3 py-2">{fmtDate(b.date)}</td>
+                    <td className="px-3 py-2">{state.patients[b.patientId]?.name ?? "—"}</td>
+                    <td className="px-3 py-2">{money(b.totalAmount)}</td>
+                    <td className="px-3 py-2">{money(b.paid)}</td>
+                    <td className="px-3 py-2">{money(b.due)}</td>
+                    <td className="px-3 py-2">{b.paymentMode}</td>
+                    <td className="px-3 py-2">
+                      <Badge
+                        tone={status === "Paid" ? "green" : status === "Partial" ? "amber" : "red"}
+                      >
+                        {status}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {paidRows.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No bills match these filters.
+            </p>
+          ) : null}
+        </div>
+      </Card>
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -253,9 +482,10 @@ function ReportsPage() {
           </div>
         </div>
         {pData && patient ? (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-6">
             {[
               ["Visits", pData.visits.length],
+              ["Appointments", pData.appointments.length],
               ["Lab tests", pData.labs.length],
               ["Studies", pData.rads.length],
               ["Pharmacy", pData.pharms.length],
@@ -269,6 +499,79 @@ function ReportsPage() {
           </div>
         ) : null}
       </Card>
+
+      <PrintOverlay
+        open={printKind === "paid"}
+        title={`Paid & Collections Report — ${RANGE_LABELS[paidRange]} · ${paidStatus} · ${paidMode}`}
+        onClose={() => setPrintKind(null)}
+      >
+        <table className="mb-4">
+          <tbody>
+            <tr>
+              <th>Bills</th>
+              <td>{paidSummary.count}</td>
+            </tr>
+            <tr>
+              <th>Billed</th>
+              <td>{money(paidSummary.billed)}</td>
+            </tr>
+            <tr>
+              <th>Collected</th>
+              <td>{money(paidSummary.collected)}</td>
+            </tr>
+            <tr>
+              <th>Outstanding</th>
+              <td>{money(paidSummary.outstanding)}</td>
+            </tr>
+            <tr>
+              <th>Efficiency</th>
+              <td>{paidSummary.efficiency.toFixed(1)}%</td>
+            </tr>
+            {paidSummary.byStatus.map((s) => (
+              <tr key={s.status}>
+                <th>{s.status}</th>
+                <td>
+                  {s.count} · {money(s.amount)}
+                </td>
+              </tr>
+            ))}
+            {paidSummary.byMode.map((m) => (
+              <tr key={m.mode}>
+                <th>Via {m.mode}</th>
+                <td>
+                  {m.count} · {money(m.collected)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Patient</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Due</th>
+              <th>Mode</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paidRows.map((b) => (
+              <tr key={b.id}>
+                <td>{fmtDate(b.date)}</td>
+                <td>{state.patients[b.patientId]?.name ?? "—"}</td>
+                <td>{money(b.totalAmount)}</td>
+                <td>{money(b.paid)}</td>
+                <td>{money(b.due)}</td>
+                <td>{b.paymentMode}</td>
+                <td>{billPaymentStatus(b)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintOverlay>
 
       <PrintOverlay
         open={printKind === "section"}
@@ -329,6 +632,29 @@ function ReportsPage() {
                     <td>{v.type}</td>
                     <td>{v.doctor}</td>
                     <td>{v.diagnosis}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <h3 className="mb-1 font-semibold">Appointments</h3>
+            <table className="mb-4">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Doctor</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.appointments.map((a) => (
+                  <tr key={a.id}>
+                    <td>{fmtDate(a.date)}</td>
+                    <td>{a.time}</td>
+                    <td>{a.doctor}</td>
+                    <td>{a.type}</td>
+                    <td>{a.status}</td>
                   </tr>
                 ))}
               </tbody>
