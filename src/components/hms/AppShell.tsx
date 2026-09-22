@@ -6,6 +6,7 @@ import { useHms } from "@/lib/hms/store";
 import { getStoredToken } from "@/lib/hms/drive";
 import { runSync } from "@/lib/hms/sync";
 import { navForRole } from "./nav";
+import { registerAppServiceWorker } from "@/lib/hms/register-sw";
 import { Button, Input } from "./ui";
 import { cn } from "@/lib/utils";
 import keghLogo from "@/assets/kegh-logo.png.asset.json";
@@ -57,6 +58,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const syncing = useRef(false);
 
   useEffect(() => setDrawer(false), [pathname]);
+
+  useEffect(() => {
+    registerAppServiceWorker();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
