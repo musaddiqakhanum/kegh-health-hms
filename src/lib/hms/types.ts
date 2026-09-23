@@ -13,8 +13,43 @@ export interface Patient {
   allergies: string;
   /** assigned / consulting doctor */
   doctor: string;
+  /** 14-digit ABHA number (stored digits-only), e.g. "93124582713456". */
+  abhaNumber?: string;
+  /** ABHA address linked with the number, e.g. "name@sbx". */
+  abhaAddress?: string;
+  /** True once the number passed live ABDM OTP verification. */
+  abhaVerified?: boolean;
+  /** When the ABHA verification happened (ms epoch). */
+  abhaVerifiedAt?: number;
+  /** PM-JAY (Ayushman) golden card / beneficiary ID. */
+  pmjayCardId?: string;
+  /** PM-JAY family / household (ration card) ID. */
+  pmjayFamilyId?: string;
+  /** Scheme the card belongs to, e.g. "PM-JAY" or a state top-up. */
+  pmjayScheme?: string;
+  /** Enrollment status of the PM-JAY card. */
+  pmjayStatus?: PmjayStatus;
+  /** True once staff confirmed the card on the NHA / state beneficiary portal. */
+  pmjayVerified?: boolean;
+  /** When the PM-JAY card was last checked (ms epoch). */
+  pmjayVerifiedAt?: number;
   createdAt: number;
 }
+
+/** Enrollment states tracked for an Ayushman (PM-JAY) card. */
+export type PmjayStatus = "Not enrolled" | "Applied" | "Enrolled" | "Verified";
+
+export const PMJAY_STATUSES: PmjayStatus[] = ["Not enrolled", "Applied", "Enrolled", "Verified"];
+
+/** Quick picks for the scheme field next to the PM-JAY card. */
+export const PMJAY_SCHEMES: string[] = [
+  "PM-JAY (Ayushman Bharat)",
+  "PM-JAY + State top-up",
+  "State health scheme",
+  "CGHS",
+  "ESIC",
+  "Private insurance",
+];
 
 export type VisitType = "OPD" | "IPD" | "Emergency";
 
