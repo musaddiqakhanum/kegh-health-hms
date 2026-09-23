@@ -1,11 +1,20 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Download, Printer } from "lucide-react";
+import { Download, Printer, Receipt } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
-import { RANGE_LABELS, inRange, type RangeKey } from "@/lib/hms/selectors";
+import {
+  RANGE_LABELS,
+  expenseCategoryTotals,
+  expenseMonthlyTotals,
+  expenseTotal,
+  inRange,
+  salaryMonthlyTotals,
+  type RangeKey,
+} from "@/lib/hms/selectors";
 import { fmtDate, money } from "@/lib/hms/format";
+import { currentPeriod, shortPeriodLabel } from "@/lib/hms/payroll";
 import { downloadCsv } from "@/lib/hms/csv";
-import { Button, Card, Field, PageHeader, Select } from "@/components/hms/ui";
+import { Badge, Button, Card, Field, PageHeader, Select } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 import { PatientPicker } from "@/components/hms/pickers";
 
@@ -35,6 +44,20 @@ function ReportsPage() {
   const [range, setRange] = useState<RangeKey>("today");
   const [patientId, setPatientId] = useState("");
   const [printKind, setPrintKind] = useState<"section" | "patient" | null>(null);
+  const [expenseMode, setExpenseMode] = useState<"monthly" | "category">("monthly");
+
+  /* Running costs — the payroll run posts one "Salaries" expense per month. */
+  const expenseMonthly = useMemo(() => expenseMonthlyTotals(state), [state]);
+  const salaryMonthly = useMemo(() => salaryMonthlyTotals(state), [state]);
+  const expenseByCategory = useMemo(() => expenseCategoryTotals(state), [state]);
+  const expenseAll = useMemo(() => expenseTotal(state), [state]);
+  const salaryAll = useMemo(
+    () => [...salaryMonthly.values()].reduce((s, v) => s + v, 0),
+    [salaryMonthly],
+  );
+  const thisMonth = currentPeriod();
+  const expenseThisMonth = expenseMonthly.find(([k]) => k === thisMonth)?.[1] ?? 0;
+  const salaryThisMonth = salaryMonthly.get(thisMonth) ?? 0;
 
   const rows = useMemo(() => {
     const list = Object.values(state[section] as Record<string, { date: string }>);
@@ -123,7 +146,145 @@ function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports" subtitle="Section-wise and patient-wise summaries" />
+      <PageHeader
+        title="Reports"
+        subtitle="Section-wise, patient-wise and monthly expense summaries"
+      />
+
+      {/* Running costs — includes the salary expense posted by each payroll run */}
+      <Card>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Expense &amp; salary summary
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="amber">{money(expenseAll)} all-time</Badge>
+            <Link to="/expenses">
+              <Button variant="outline">
+                <Receipt className="h-4 w-4" /> Expenses page
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Hospital running costs entered on the Expenses page. Each payroll run posts one
+          &ldquo;Salaries&rdquo; entry per month, so the salary column below is the net pay of that
+          month&rsquo;s run.
+        </p>
+
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Expenses · {shortPeriodLabel(thisMonth)}
+            </p>
+            <p className="text-base font-semibold">{money(expenseThisMonth)}</p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Salaries · {shortPeriodLabel(thisMonth)}
+            </p>
+            <p className="text-base font-semibold">{money(salaryThisMonth)}</p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Salaries all-time</p>
+            <p className="text-base font-semibold">{money(salaryAll)}</p>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Collected · {RANGE_LABELS[range]}</p>
+            <p className="text-base font-semibold">
+              {money(
+                Object.values(state.bills)
+                  .filter((b) => inRange(b.date, range))
+                  .reduce((s, b) => s + Number(b.paid || 0), 0),
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            variant={expenseMode === "monthly" ? "primary" : "outline"}
+            onClick={() => setExpenseMode("monthly")}
+          >
+            Monthly totals
+          </Button>
+          <Button
+            variant={expenseMode === "category" ? "primary" : "outline"}
+            onClick={() => setExpenseMode("category")}
+          >
+            By category
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!expenseMonthly.length}
+            onClick={() =>
+              downloadCsv("kegh-expense-monthly-totals.csv", [
+                ["Month", "Expenses", "Of which salaries", "Share"],
+                ...expenseMonthly.map(([key, total]) => [
+                  shortPeriodLabel(key),
+                  total,
+                  salaryMonthly.get(key) ?? 0,
+                  expenseAll > 0 ? `${((total / expenseAll) * 100).toFixed(0)}%` : "—",
+                ]),
+              ])
+            }
+          >
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+        </div>
+
+        {expenseMode === "monthly" ? (
+          <div className="max-h-80 overflow-auto rounded-md ring-1 ring-border/60">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-secondary">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Month</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Expenses</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                    Of which salaries
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Share</th>
+                </tr>
+              </thead>
+              <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+                {expenseMonthly.map(([key, total]) => (
+                  <tr key={key}>
+                    <td className="px-3 py-2 font-medium">{shortPeriodLabel(key)}</td>
+                    <td className="px-3 py-2">{money(total)}</td>
+                    <td className="px-3 py-2">
+                      {salaryMonthly.get(key) ? money(salaryMonthly.get(key)) : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {expenseAll > 0 ? `${((total / expenseAll) * 100).toFixed(0)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {expenseMonthly.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                      No expenses recorded yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {expenseByCategory.map(([cat, total]) => (
+              <div key={cat} className="rounded-md bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">{cat}</p>
+                <p className="text-base font-semibold">{money(total)}</p>
+              </div>
+            ))}
+            {expenseByCategory.length === 0 ? (
+              <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+                No expenses recorded yet.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Card>
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

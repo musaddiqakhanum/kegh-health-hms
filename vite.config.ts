@@ -14,6 +14,10 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    server: {
+      // Let the sandboxed preview hosts (Arena / Lovable) load the dev server.
+      allowedHosts: [".e2b.app", ".lovable.app", ".lovableproject.com"],
+    },
     plugins: [
       VitePWA({
         registerType: "autoUpdate",

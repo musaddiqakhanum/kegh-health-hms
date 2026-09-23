@@ -1,14 +1,17 @@
 import {
   BarChart3,
+  Banknote,
   Cloud,
   FlaskConical,
   IndianRupee,
   LayoutDashboard,
   Pill,
+  Receipt,
   Scan,
   Settings as SettingsIcon,
   Stethoscope,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/lib/hms/types";
@@ -28,12 +31,16 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/radiology", label: "Radiology", icon: Scan, key: "rads" },
   { to: "/pharmacy", label: "Pharmacy", icon: Pill, key: "pharms" },
   { to: "/billing", label: "Billing", icon: IndianRupee, key: "billing" },
+  { to: "/staff", label: "Staff Records", icon: UsersRound, key: "staff" },
+  { to: "/payroll", label: "Payroll", icon: Banknote, key: "payroll" },
+  { to: "/expenses", label: "Expenses", icon: Receipt, key: "expenses" },
   { to: "/reports", label: "Reports", icon: BarChart3, key: "reports" },
   { to: "/sync", label: "Google Drive Sync", icon: Cloud, key: "sync" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, key: "settings" },
 ];
 
 const ROLE_KEYS: Record<Role, string[] | "all"> = {
+  // Admin sees everything, including staff salaries, payroll and expenses.
   Admin: "all",
   Reception: ["dash", "patients", "visits", "billing", "reports", "settings"],
   Doctor: ["dash", "patients", "visits", "labs", "rads", "pharms", "settings"],

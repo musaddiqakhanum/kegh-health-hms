@@ -43,6 +43,7 @@ function Dashboard() {
   ];
 
   const todayBills = Object.values(state.bills).filter((b) => isSameDay(b.date));
+  const isAdmin = settings.role === "Admin";
 
   return (
     <div className="space-y-6">
@@ -73,6 +74,8 @@ function Dashboard() {
         <Stat label="Today's collection" value={money(stats.collectionToday)} />
         <Stat label="Admitted (IPD)" value={stats.admitted} />
         <Stat label="All-time collection" value={money(stats.collectionAll)} />
+        {isAdmin ? <Stat label="Staff on roll" value={stats.staffOnRoll} /> : null}
+        {isAdmin ? <Stat label="Salaries this month" value={money(stats.salaryThisMonth)} /> : null}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
