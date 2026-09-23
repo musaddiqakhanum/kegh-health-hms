@@ -14,3 +14,4 @@
 - [x] Expenses page (Admin) with salary posted from each payroll run
 - [x] Reports: monthly expense totals incl. salaries, category breakdown
 - [x] Sync every collection (staff, payroll, expenses, appointments…) between devices
+- [x] Live ABHA (ABDM) OTP verification + Ayushman (PM-JAY) card fields on patients
