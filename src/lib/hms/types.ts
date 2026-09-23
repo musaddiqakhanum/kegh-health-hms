@@ -200,6 +200,113 @@ export interface Expense {
   amount: number;
   notes: string;
   paidBy: string;
+  /** Payroll month (YYYY-MM) when the entry was posted by a payroll run. */
+  payrollPeriod?: string | undefined;
+  /** "payroll" entries are maintained from the Payroll page, not by hand. */
+  source?: "manual" | "payroll" | undefined;
+  createdAt: number;
+}
+
+/** Quick picks offered while registering a staff member. */
+export const STAFF_ROLES: string[] = [
+  "Doctor",
+  "Nurse",
+  "Receptionist",
+  "Lab Technician",
+  "Radiology Technician",
+  "Pharmacist",
+  "Accountant",
+  "Administrator",
+  "Housekeeping",
+  "Security",
+  "Other",
+];
+
+/** Quick picks for the department field on staff and payroll records. */
+export const DEPARTMENTS: string[] = [
+  "Administration",
+  "Billing & Accounts",
+  "Casualty / Emergency",
+  "Housekeeping",
+  "Laboratory",
+  "Nursing",
+  "OPD",
+  "Pharmacy",
+  "Radiology",
+  "Reception",
+  "Security",
+];
+
+/** A person on the hospital roll — the master record the payroll run reads. */
+export interface Staff {
+  id: ID;
+  name: string;
+  /** Job title, e.g. "Staff Nurse" or "Lab Technician". */
+  role: string;
+  department: string;
+  phone: string;
+  /** Gross monthly salary in ₹. */
+  monthlySalary: number;
+  /** Date of joining, YYYY-MM-DD. */
+  joinDate: string;
+  /** Last working day, YYYY-MM-DD. Empty while the person is on roll. */
+  leaveDate: string;
+  notes: string;
+  createdAt: number;
+}
+
+export type PayrollStatus = "Draft" | "Approved" | "Paid";
+
+export const PAYROLL_STATUSES: PayrollStatus[] = ["Draft", "Approved", "Paid"];
+
+/** Salary disbursement modes offered on the payroll run. */
+export const PAYROLL_MODES: string[] = ["Bank transfer", "Cash", "UPI", "Cheque"];
+
+/** Quick picks shown next to the deduction field on a payroll entry. */
+export const DEDUCTION_REASONS: string[] = [
+  "PF",
+  "ESI",
+  "TDS",
+  "Loan recovery",
+  "Leave / absence",
+  "Penalty",
+  "Other",
+];
+
+/**
+ * One staff member's pay for a single monthly payroll run.
+ * `period` is the payroll month as YYYY-MM.
+ */
+export interface PayrollEntry {
+  id: ID;
+  /** Payroll month, YYYY-MM. */
+  period: string;
+  staffId: ID;
+  /** Snapshot of the staff record, so printed payslips survive later edits. */
+  staffName: string;
+  role: string;
+  department: string;
+  /** Calendar days in the payroll month. */
+  daysInMonth: number;
+  /** Payable days after pro-rating the join / leave dates. */
+  payableDays: number;
+  /** Pro-rated gross salary for the month (₹). */
+  gross: number;
+  /** Advance handed over with this month's pay — added to the payout (₹). */
+  advanceGiven: number;
+  /** Recovery of an advance paid earlier — deducted from the payout (₹). */
+  advanceRecovery: number;
+  /** Other deductions: PF, ESI, TDS, loan, absence… (₹). */
+  deductions: number;
+  /** Free-text reason for `deductions`. */
+  deductionNote: string;
+  /** gross + advanceGiven − advanceRecovery − deductions (₹). */
+  netPay: number;
+  paymentMode: string;
+  /** Date the salary was actually paid, YYYY-MM-DD. Empty until paid. */
+  paidOn: string;
+  status: PayrollStatus;
+  notes: string;
   createdAt: number;
 }
 
@@ -228,7 +335,26 @@ export type Collection =
   | "doctorSchedules"
   | "prescriptions"
   | "expenses"
+  | "staff"
+  | "payrolls"
   | "auditLogs";
+
+/** Every synced collection — merge, backup and import all iterate this list. */
+export const COLLECTIONS: Collection[] = [
+  "patients",
+  "visits",
+  "labs",
+  "rads",
+  "pharms",
+  "bills",
+  "appointments",
+  "doctorSchedules",
+  "prescriptions",
+  "expenses",
+  "staff",
+  "payrolls",
+  "auditLogs",
+];
 
 export interface HmsState {
   patients: Record<ID, Patient>;
@@ -241,6 +367,8 @@ export interface HmsState {
   doctorSchedules: Record<ID, DoctorSchedule>;
   prescriptions: Record<ID, Prescription>;
   expenses: Record<ID, Expense>;
+  staff: Record<ID, Staff>;
+  payrolls: Record<ID, PayrollEntry>;
   auditLogs: Record<ID, AuditLog>;
   /** operation log: `${collection}:${id}` -> last write timestamp (ms) */
   ops: Record<string, number>;
@@ -281,6 +409,8 @@ export const emptyState = (): HmsState => ({
   doctorSchedules: {},
   prescriptions: {},
   expenses: {},
+  staff: {},
+  payrolls: {},
   auditLogs: {},
   ops: {},
   deleted: {},
