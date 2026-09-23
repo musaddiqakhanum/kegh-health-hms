@@ -113,6 +113,18 @@ export type AppointmentType = "OPD" | "Follow-up" | "Consultation" | "IPD" | "Em
 export type AppointmentStatus =
   "Scheduled" | "Confirmed" | "CheckedIn" | "Completed" | "Cancelled" | "NoShow";
 
+export const APPOINTMENT_STATUSES: AppointmentStatus[] = [
+  "Scheduled",
+  "Confirmed",
+  "CheckedIn",
+  "Completed",
+  "Cancelled",
+  "NoShow",
+];
+
+/** Types offered when booking — emergencies arrive through triage, not the diary. */
+export const APPOINTMENT_TYPES: AppointmentType[] = ["OPD", "Follow-up", "Consultation", "IPD"];
+
 export interface Appointment {
   id: ID;
   patientId: ID;

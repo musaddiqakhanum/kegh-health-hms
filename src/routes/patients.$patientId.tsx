@@ -3,8 +3,9 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Download, Printer } from "lucide-react";
 import { useHms } from "@/lib/hms/store";
 import { ageFromDob, fmtDate, money } from "@/lib/hms/format";
-import { sortByDateDesc } from "@/lib/hms/selectors";
+import { prescriptionSummary, prescriptionsForPatient, sortByDateDesc } from "@/lib/hms/selectors";
 import { downloadCsv } from "@/lib/hms/csv";
+import type { AppointmentStatus } from "@/lib/hms/types";
 import { Badge, Button, Card, PageHeader } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 
@@ -23,6 +24,13 @@ export const Route = createFileRoute("/patients/$patientId")({
 const flagTone = (f: string) =>
   f === "normal" ? "green" : f === "critical" ? "red" : "amber";
 
+const apptTone = (s: AppointmentStatus): "green" | "amber" | "red" | "neutral" =>
+  s === "Completed" || s === "Confirmed"
+    ? "green"
+    : s === "Scheduled" || s === "CheckedIn"
+      ? "amber"
+      : "red";
+
 function Patient360() {
   const { patientId } = Route.useParams();
   const { state } = useHms();
@@ -37,6 +45,17 @@ function Patient360() {
   const rads = Object.values(state.rads).filter((r) => r.patientId === patientId);
   const pharms = Object.values(state.pharms).filter((p) => p.patientId === patientId);
   const bills = Object.values(state.bills).filter((b) => b.patientId === patientId);
+  const appointments = useMemo(
+    () =>
+      sortByDateDesc(
+        Object.values(state.appointments ?? {}).filter((a) => a.patientId === patientId),
+      ),
+    [state.appointments, patientId],
+  );
+  const prescriptions = useMemo(
+    () => prescriptionsForPatient(state, patientId),
+    [state, patientId],
+  );
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -59,6 +78,18 @@ function Patient360() {
   const exportCsv = () => {
     const rows: (string | number)[][] = [["Section", "Date", "Detail 1", "Detail 2", "Detail 3"]];
     visits.forEach((v) => rows.push(["Visit", v.date, v.type, v.doctor, v.diagnosis]));
+    appointments.forEach((a) =>
+      rows.push([
+        "Appointment",
+        a.date,
+        `${a.time || ""} · ${a.doctor || ""}`,
+        a.tokenNo ? `Token ${a.tokenNo}` : "",
+        a.status,
+      ]),
+    );
+    prescriptions.forEach((r) =>
+      rows.push(["Prescription", r.date, r.doctor, r.diagnosis, prescriptionSummary(r, 99)]),
+    );
     labs.forEach((l) => rows.push(["Lab", l.date, l.testName, `${l.result} ${l.unit}`, l.flag]));
     rads.forEach((r) => rows.push(["Radiology", r.date, r.studyType, r.impression, r.radiologist]));
     pharms.forEach((p) =>
@@ -124,11 +155,67 @@ function Patient360() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Link to="/appointments">
+          <Button variant="outline">Book appointment</Button>
+        </Link>
+        <Link to="/prescriptions">
+          <Button variant="outline">Add prescription</Button>
+        </Link>
         <Link to="/visits"><Button variant="outline">Add visit</Button></Link>
         <Link to="/laboratory"><Button variant="outline">Add lab</Button></Link>
         <Link to="/radiology"><Button variant="outline">Add radiology</Button></Link>
         <Link to="/pharmacy"><Button variant="outline">Add pharmacy</Button></Link>
         <Link to="/billing"><Button variant="outline">Add bill</Button></Link>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Appointments
+          </h3>
+          {appointments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No appointments booked.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {appointments.map((a) => (
+                <li key={a.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{fmtDate(a.date)}</span>
+                  <span className="text-muted-foreground">{a.time || "—"}</span>
+                  <span>{a.doctor || "—"}</span>
+                  {a.tokenNo ? <Badge tone="neutral">Token {a.tokenNo}</Badge> : null}
+                  <span className="ml-auto">
+                    <Badge tone={apptTone(a.status)}>{a.status}</Badge>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Prescriptions
+          </h3>
+          {prescriptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No prescriptions written.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {prescriptions.map((r) => (
+                <li key={r.id}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{fmtDate(r.date)}</span>
+                    <span className="text-muted-foreground">{r.doctor || "—"}</span>
+                    {r.diagnosis ? <Badge tone="neutral">{r.diagnosis}</Badge> : null}
+                  </div>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {prescriptionSummary(r, 4)}
+                    {r.notes ? ` · ${r.notes}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
 
       <div className="space-y-4">
@@ -209,6 +296,35 @@ function Patient360() {
           </tbody>
         </table>
 
+        <h3 className="mb-1 mt-4 font-semibold">Appointments</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Doctor</th>
+              <th>Token</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {appointments.map((a) => (
+              <tr key={a.id}>
+                <td>{fmtDate(a.date)}</td>
+                <td>{a.time || "—"}</td>
+                <td>{a.doctor || "—"}</td>
+                <td>{a.tokenNo ?? "—"}</td>
+                <td>{a.status}</td>
+              </tr>
+            ))}
+            {appointments.length === 0 ? (
+              <tr>
+                <td colSpan={5}>No appointments booked.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+
         <h3 className="mb-1 mt-4 font-semibold">Laboratory</h3>
         <table>
           <thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Flag</th></tr></thead>
@@ -236,6 +352,33 @@ function Patient360() {
             {pharms.map((p) => (
               <tr key={p.id}><td>{fmtDate(p.date)}</td><td>{p.medication}</td><td>{p.qty}</td><td>{money(p.qty * p.rate)}</td></tr>
             ))}
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 font-semibold">Prescriptions</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Doctor</th>
+              <th>Diagnosis</th>
+              <th>Medicines</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prescriptions.map((r) => (
+              <tr key={r.id}>
+                <td>{fmtDate(r.date)}</td>
+                <td>{r.doctor || "—"}</td>
+                <td>{r.diagnosis || "—"}</td>
+                <td>{prescriptionSummary(r, 99)}</td>
+              </tr>
+            ))}
+            {prescriptions.length === 0 ? (
+              <tr>
+                <td colSpan={4}>No prescriptions written.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
 
