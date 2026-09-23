@@ -9,6 +9,10 @@
  *  - Profile fetch:      GET  {abha}/abha/api/v3/profile/account
  */
 
+import type { AbhaLoginHint, AbhaProfile } from "./healthId";
+
+export type { AbhaProfile };
+
 export interface AbdmConfig {
   clientId: string;
   clientSecret: string;
@@ -21,13 +25,18 @@ export function readAbdmConfig(): AbdmConfig | null {
   const clientId = process.env["ABDM_CLIENT_ID"];
   const clientSecret = process.env["ABDM_CLIENT_SECRET"];
   if (!clientId || !clientSecret) return null;
-  const environment = (process.env["ABDM_ENVIRONMENT"] ?? "sandbox") === "production" ? "production" : "sandbox";
+  const environment =
+    (process.env["ABDM_ENVIRONMENT"] ?? "sandbox") === "production" ? "production" : "sandbox";
   const sandbox = environment === "sandbox";
   return {
     clientId,
     clientSecret,
-    gatewayBase: process.env["ABDM_GATEWAY_BASE"] ?? (sandbox ? "https://dev.abdm.gov.in" : "https://abdm.gov.in"),
-    abhaBase: process.env["ABDM_ABHA_BASE"] ?? (sandbox ? "https://abhasbx.abdm.gov.in" : "https://abha.abdm.gov.in"),
+    gatewayBase:
+      process.env["ABDM_GATEWAY_BASE"] ??
+      (sandbox ? "https://dev.abdm.gov.in" : "https://abdm.gov.in"),
+    abhaBase:
+      process.env["ABDM_ABHA_BASE"] ??
+      (sandbox ? "https://abhasbx.abdm.gov.in" : "https://abha.abdm.gov.in"),
     environment,
   };
 }
@@ -82,8 +91,12 @@ export async function getSessionToken(cfg: AbdmConfig): Promise<string> {
   });
   if (!res.ok) await readError(res, "session");
   const data = (await res.json()) as { accessToken?: string; expiresIn?: number };
-  if (!data.accessToken) throw new AbdmError("ABDM session response did not contain an access token");
-  cachedToken = { token: data.accessToken, expiresAt: Date.now() + (data.expiresIn ?? 1200) * 1000 };
+  if (!data.accessToken)
+    throw new AbdmError("ABDM session response did not contain an access token");
+  cachedToken = {
+    token: data.accessToken,
+    expiresAt: Date.now() + (data.expiresIn ?? 1200) * 1000,
+  };
   return data.accessToken;
 }
 
@@ -120,7 +133,11 @@ function pemToDer(pem: string): Uint8Array {
 }
 
 /** RSA-OAEP(SHA-1) encrypt a value with the ABDM public key, base64 encoded. */
-export async function encryptWithAbdmKey(cfg: AbdmConfig, token: string, value: string): Promise<string> {
+export async function encryptWithAbdmKey(
+  cfg: AbdmConfig,
+  token: string,
+  value: string,
+): Promise<string> {
   const pem = await getPublicCertificate(cfg, token);
   const key = await crypto.subtle.importKey(
     "spki",
@@ -129,36 +146,34 @@ export async function encryptWithAbdmKey(cfg: AbdmConfig, token: string, value: 
     false,
     ["encrypt"],
   );
-  const cipher = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, new TextEncoder().encode(value));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    key,
+    new TextEncoder().encode(value),
+  );
   let binary = "";
   const bytes = new Uint8Array(cipher);
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
   return btoa(binary);
 }
 
-export interface AbhaProfile {
-  abhaNumber: string;
-  abhaAddress: string;
-  name: string;
-  gender: string;
-  dob: string;
-  mobile: string;
-  address: string;
-}
-
-/** Step 1 — send an OTP to the mobile linked with the given ABHA number. */
-export async function requestAbhaLoginOtp(abhaNumber: string): Promise<{ txnId: string; message: string }> {
+/** Step 1 — send an OTP to the mobile linked with the given ABHA number or address. */
+export async function requestAbhaLoginOtp(
+  loginId: string,
+  loginHint: AbhaLoginHint = "abha-number",
+): Promise<{ txnId: string; message: string }> {
   const cfg = readAbdmConfig();
   if (!cfg) throw new AbdmError("ABDM credentials are not configured on this server", 503);
   const token = await getSessionToken(cfg);
-  const encrypted = await encryptWithAbdmKey(cfg, token, abhaNumber.replace(/\D/g, ""));
+  const value = loginHint === "abha-number" ? loginId.replace(/\D/g, "") : loginId.trim();
+  const encrypted = await encryptWithAbdmKey(cfg, token, value);
 
   const res = await fetch(`${cfg.abhaBase}/abha/api/v3/profile/login/request/otp`, {
     method: "POST",
     headers: { ...baseHeaders(), Authorization: `Bearer ${token}` },
     body: JSON.stringify({
       scope: ["abha-login", "mobile-verify"],
-      loginHint: "abha-number",
+      loginHint,
       loginId: encrypted,
       otpSystem: "abdm",
     }),
@@ -166,7 +181,10 @@ export async function requestAbhaLoginOtp(abhaNumber: string): Promise<{ txnId: 
   if (!res.ok) await readError(res, "OTP request");
   const data = (await res.json()) as { txnId?: string; message?: string };
   if (!data.txnId) throw new AbdmError("ABDM did not return a transaction id for this ABHA number");
-  return { txnId: data.txnId, message: data.message ?? "OTP sent to the mobile linked with this ABHA number." };
+  return {
+    txnId: data.txnId,
+    message: data.message ?? "OTP sent to the mobile linked with this ABHA number.",
+  };
 }
 
 /** Step 2 — verify the OTP and pull the ABHA profile. */
@@ -210,10 +228,14 @@ export async function verifyAbhaLoginOtp(txnId: string, otp: string): Promise<Ab
   return {
     abhaNumber: str("ABHANumber") || str("abhaNumber"),
     abhaAddress: str("preferredAbhaAddress") || str("abhaAddress"),
-    name: str("name") || [str("firstName"), str("middleName"), str("lastName")].filter(Boolean).join(" "),
+    name:
+      str("name") ||
+      [str("firstName"), str("middleName"), str("lastName")].filter(Boolean).join(" "),
     gender: str("gender"),
     dob,
     mobile: str("mobile"),
-    address: [str("address"), str("districtName"), str("stateName"), str("pincode")].filter(Boolean).join(", "),
+    address: [str("address"), str("districtName"), str("stateName"), str("pincode")]
+      .filter(Boolean)
+      .join(", "),
   };
 }

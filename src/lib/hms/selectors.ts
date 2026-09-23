@@ -30,11 +30,17 @@ export function visitLabel(state: HmsState, id: string): string {
 export function searchPatients(patients: Patient[], q: string): Patient[] {
   const s = q.trim().toLowerCase();
   if (!s) return patients;
+  const digits = s.replace(/\D/g, "");
   return patients.filter(
     (p) =>
       p.name?.toLowerCase().includes(s) ||
       p.mrn?.toLowerCase().includes(s) ||
-      p.phone?.toLowerCase().includes(s),
+      p.phone?.toLowerCase().includes(s) ||
+      p.abhaAddress?.toLowerCase().includes(s) ||
+      p.pmjayCardId?.toLowerCase().includes(s) ||
+      p.pmjayFamilyId?.toLowerCase().includes(s) ||
+      // ABHA numbers are stored digits-only, so compare without formatting.
+      (digits.length >= 4 && (p.abhaNumber ?? "").includes(digits)),
   );
 }
 

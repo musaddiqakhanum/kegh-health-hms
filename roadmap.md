@@ -21,3 +21,4 @@
 - [x] Reports: appointments & prescriptions sections with range, print and CSV
 - [x] Reports: OPD activity & prescribing card with doctor-wise table
 - [x] Dashboard & Patient 360: appointment and prescription tiles, lists and print
+- [x] Live ABHA (ABDM) OTP verification + Ayushman (PM-JAY) card fields on patients
