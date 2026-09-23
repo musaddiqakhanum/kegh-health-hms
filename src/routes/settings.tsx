@@ -27,6 +27,7 @@ function SettingsPage() {
   const { settings, updateSettings, state, mergeIn } = useHms();
   const [pin, setPin] = useState(settings.pin);
   const [pass, setPass] = useState(getPassphrase());
+  const [newDoctor, setNewDoctor] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const exportKeg = async () => {
@@ -87,6 +88,54 @@ function SettingsPage() {
             </Select>
           </Field>
         </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="font-semibold">Doctors</h2>
+        <p className="text-xs text-muted-foreground">
+          These names appear in the doctor list on patient and visit forms.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Doctor name">
+            <Input placeholder="Dr. Full Name" value={newDoctor} onChange={(e) => setNewDoctor(e.target.value)} />
+          </Field>
+          <Button
+            onClick={() => {
+              const clean = newDoctor.trim();
+              if (!clean) { toast.error("Enter the doctor's name"); return; }
+              const list = settings.doctors ?? [];
+              if (list.some((d) => d.toLowerCase() === clean.toLowerCase())) {
+                toast.error("That doctor is already on the list");
+                return;
+              }
+              updateSettings({ doctors: [...list, clean].sort((a, b) => a.localeCompare(b)) });
+              setNewDoctor("");
+              toast.success(`${clean} added`);
+            }}
+          >
+            Add doctor
+          </Button>
+        </div>
+        {(settings.doctors ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No doctors added yet.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-md ring-1 ring-border/60">
+            {(settings.doctors ?? []).map((d) => (
+              <li key={d} className="flex items-center justify-between px-3 py-2 text-sm">
+                <span>{d}</span>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    updateSettings({ doctors: (settings.doctors ?? []).filter((x) => x !== d) });
+                    toast.success(`${d} removed`);
+                  }}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card className="space-y-4">
