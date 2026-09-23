@@ -154,14 +154,14 @@ function Dashboard() {
   const quickActionsByRole: Record<Role, { to: string; title: string; desc: string }[]> = {
     Admin: [
       { to: "/patients", title: "Register patient", desc: "Create a KEGH MRN" },
-      { to: "/appointments", title: "Schedule appointment", desc: "Book OPD / follow-up" },
-      { to: "/visits", title: "New visit", desc: "OPD, IPD or emergency" },
-      { to: "/billing", title: "Create bill", desc: "Collect payment or due" },
+      { to: "/queue", title: "OPD token queue", desc: "Today's confirmed patients" },
+      { to: "/prescriptions", title: "Prescriptions", desc: "Print patient Rx" },
+      { to: "/expenses", title: "Add expense", desc: "Track hospital costs" },
     ],
     Reception: [
       { to: "/patients", title: "Register patient", desc: "Create a KEGH MRN" },
       { to: "/appointments", title: "Schedule appointment", desc: "Book OPD / follow-up" },
-      { to: "/visits", title: "New visit", desc: "OPD, IPD or emergency" },
+      { to: "/queue", title: "OPD token queue", desc: "Call, skip, complete" },
       { to: "/billing", title: "Create bill", desc: "Collect payment or due" },
     ],
     Doctor: [
@@ -170,8 +170,8 @@ function Dashboard() {
         title: "Today's appointments",
         desc: `${todayAppointments.length} scheduled`,
       },
-      { to: "/visits", title: "New visit", desc: "Record diagnosis & notes" },
-      { to: "/laboratory", title: "Add lab result", desc: "Record a test result" },
+      { to: "/queue", title: "OPD token queue", desc: "Next patient in line" },
+      { to: "/prescriptions", title: "New prescription", desc: "Printable Rx with sign-off" },
       { to: "/pharmacy", title: "Prescribe", desc: "Add pharmacy entry" },
     ],
     Lab: [

@@ -42,6 +42,13 @@ function Patient360() {
   const labs = Object.values(state.labs).filter((l) => l.patientId === patientId);
   const rads = Object.values(state.rads).filter((r) => r.patientId === patientId);
   const pharms = Object.values(state.pharms).filter((p) => p.patientId === patientId);
+  const prescriptions = useMemo(
+    () =>
+      sortByDateDesc(
+        Object.values(state.prescriptions ?? {}).filter((r) => r.patientId === patientId),
+      ),
+    [state.prescriptions, patientId],
+  );
   const bills = Object.values(state.bills).filter((b) => b.patientId === patientId);
   const appointments = useMemo(
     () =>
@@ -138,9 +145,10 @@ function Patient360() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           ["Appointments", appointments.length],
+          ["Prescriptions", prescriptions.length],
           ["Total billed", money(totals.billed)],
           ["Paid", money(totals.paid)],
           ["Due", money(totals.due)],
@@ -170,6 +178,9 @@ function Patient360() {
         </Link>
         <Link to="/pharmacy">
           <Button variant="outline">Add pharmacy</Button>
+        </Link>
+        <Link to="/prescriptions">
+          <Button variant="outline">Prescription</Button>
         </Link>
         <Link to="/billing">
           <Button variant="outline">Add bill</Button>
@@ -203,6 +214,39 @@ function Patient360() {
                   {a.status}
                 </Badge>
                 {a.notes ? <span className="text-muted-foreground">{a.notes}</span> : null}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {prescriptions.length > 0 && (
+        <Card>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <Printer className="h-4 w-4" /> Prescriptions ({prescriptions.length})
+          </h3>
+          <div className="space-y-2">
+            {prescriptions.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {fmtDate(r.date)} · {r.doctor || "—"}
+                  </p>
+                  {r.diagnosis ? (
+                    <p className="text-xs text-muted-foreground">Diagnosis: {r.diagnosis}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {(r.items ?? [])
+                      .map((m) => `${m.medication} ${m.dosage || ""} ${m.frequency || ""}`)
+                      .join(" · ") || "No medications listed"}
+                  </p>
+                </div>
+                <Link to="/prescriptions" className="shrink-0 text-xs text-accent underline">
+                  View / print
+                </Link>
               </div>
             ))}
           </div>

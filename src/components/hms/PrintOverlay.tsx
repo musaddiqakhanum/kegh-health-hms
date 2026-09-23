@@ -27,7 +27,7 @@ export function PrintOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4 print-overlay-backdrop">
       <div
         id="print-overlay"
         className="mx-auto max-w-4xl rounded-lg bg-white p-8 text-slate-900 shadow-xl"

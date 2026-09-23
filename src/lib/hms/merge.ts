@@ -9,6 +9,8 @@ const COLLECTIONS: Collection[] = [
   "bills",
   "appointments",
   "doctorSchedules",
+  "prescriptions",
+  "expenses",
   "auditLogs",
 ];
 

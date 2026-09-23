@@ -27,6 +27,10 @@ export interface Visit {
   notes: string;
   admissionDate: string;
   dischargeDate: string;
+  /** IPD: procedures / interventions performed during admission. */
+  procedures?: string;
+  /** IPD: follow-up advice given at discharge. */
+  followUp?: string;
   createdAt: number;
 }
 
@@ -117,6 +121,10 @@ export interface Appointment {
   type: AppointmentType;
   status: AppointmentStatus;
   notes: string;
+  /** OPD token number derived from today's confirmed appointments. */
+  tokenNo?: number;
+  /** When the appointment was checked in at the queue (clock time). */
+  tokenTime?: string;
   createdAt: number;
 }
 
@@ -130,6 +138,66 @@ export interface DoctorSchedule {
   /** Human-readable slots, e.g. "09:00-13:00, 17:00-20:00". */
   slots: string;
   active: boolean;
+  createdAt: number;
+}
+
+/** One medication line on a prescription. */
+export interface PrescriptionItem {
+  medication: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+}
+
+export function isPrescriptionItem(v: unknown): v is PrescriptionItem {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o["medication"] === "string";
+}
+
+export type PrescriptionSource = "visit" | "queue";
+
+export interface Prescription {
+  id: ID;
+  patientId: ID;
+  visitId: ID;
+  date: string;
+  doctor: string;
+  diagnosis: string;
+  items: PrescriptionItem[];
+  notes: string;
+  /** Freely-typed sign-off; defaults to the prescribing doctor name. */
+  signOff: string;
+  createdAt: number;
+}
+
+/** Expense categories used on the expense entry page. */
+export type ExpenseCategory =
+  | "Salaries"
+  | "Rent & utilities"
+  | "Supplies & consumables"
+  | "Equipment"
+  | "Maintenance"
+  | "Medicines"
+  | "Miscellaneous";
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  "Salaries",
+  "Rent & utilities",
+  "Supplies & consumables",
+  "Equipment",
+  "Maintenance",
+  "Medicines",
+  "Miscellaneous",
+];
+
+export interface Expense {
+  id: ID;
+  date: string;
+  category: ExpenseCategory | string;
+  amount: number;
+  notes: string;
+  paidBy: string;
   createdAt: number;
 }
 
@@ -156,6 +224,8 @@ export type Collection =
   | "bills"
   | "appointments"
   | "doctorSchedules"
+  | "prescriptions"
+  | "expenses"
   | "auditLogs";
 
 export interface HmsState {
@@ -167,6 +237,8 @@ export interface HmsState {
   bills: Record<ID, Bill>;
   appointments: Record<ID, Appointment>;
   doctorSchedules: Record<ID, DoctorSchedule>;
+  prescriptions: Record<ID, Prescription>;
+  expenses: Record<ID, Expense>;
   auditLogs: Record<ID, AuditLog>;
   /** operation log: `${collection}:${id}` -> last write timestamp (ms) */
   ops: Record<string, number>;
@@ -203,6 +275,8 @@ export const emptyState = (): HmsState => ({
   bills: {},
   appointments: {},
   doctorSchedules: {},
+  prescriptions: {},
+  expenses: {},
   auditLogs: {},
   ops: {},
   deleted: {},
