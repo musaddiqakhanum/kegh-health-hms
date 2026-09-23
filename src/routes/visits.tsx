@@ -8,6 +8,7 @@ import { fmtDate, todayISO } from "@/lib/hms/format";
 import type { Visit } from "@/lib/hms/types";
 import { Badge, Button, DataTable, Field, Input, Modal, PageHeader, Select, Td, Textarea } from "@/components/hms/ui";
 import { PatientPicker, confirmDelete } from "@/components/hms/pickers";
+import { DoctorSelect } from "@/components/hms/DoctorSelect";
 
 export const Route = createFileRoute("/visits")({
   head: () => ({
@@ -82,7 +83,16 @@ function VisitsPage() {
       <Modal open={open} title={form.id ? "Edit visit" : "New visit"} onClose={() => setOpen(false)} wide>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Patient" required className="sm:col-span-2">
-            <PatientPicker value={form.patientId ?? ""} onChange={(id) => set("patientId", id)} />
+            <PatientPicker
+              value={form.patientId ?? ""}
+              onChange={(id) =>
+                setForm((f) => ({
+                  ...f,
+                  patientId: id,
+                  doctor: f.doctor || state.patients[id]?.doctor || "",
+                }))
+              }
+            />
           </Field>
           <Field label="Date" required>
             <Input type="date" value={form.date ?? ""} onChange={(e) => set("date", e.target.value)} />
@@ -93,7 +103,7 @@ function VisitsPage() {
             </Select>
           </Field>
           <Field label="Doctor">
-            <Input value={form.doctor ?? ""} onChange={(e) => set("doctor", e.target.value)} />
+            <DoctorSelect value={form.doctor ?? ""} onChange={(d) => set("doctor", d)} />
           </Field>
           <Field label="Department">
             <Input value={form.department ?? ""} onChange={(e) => set("department", e.target.value)} />
