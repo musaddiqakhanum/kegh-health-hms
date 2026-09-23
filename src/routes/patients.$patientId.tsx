@@ -102,6 +102,7 @@ function Patient360() {
           <p><span className="text-muted-foreground">Phone:</span> {patient.phone || "—"}</p>
           <p><span className="text-muted-foreground">DOB:</span> {fmtDate(patient.dob)}</p>
           <p><span className="text-muted-foreground">Blood group:</span> {patient.bloodGroup || "—"}</p>
+          <p><span className="text-muted-foreground">Assigned doctor:</span> {patient.doctor || "—"}</p>
           <p><span className="text-muted-foreground">Father / guardian:</span> {patient.fatherName || "—"}</p>
           <p className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {patient.address || "—"}</p>
           <p className="sm:col-span-3"><span className="text-muted-foreground">Allergies:</span> {patient.allergies || "None recorded"}</p>

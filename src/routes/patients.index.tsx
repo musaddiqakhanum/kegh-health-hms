@@ -9,6 +9,7 @@ import { nextMrn } from "@/lib/hms/mrn";
 import type { Patient } from "@/lib/hms/types";
 import { Button, Card, DataTable, Field, Input, Modal, PageHeader, Select, Td, Textarea } from "@/components/hms/ui";
 import { confirmDelete } from "@/components/hms/pickers";
+import { DoctorSelect } from "@/components/hms/DoctorSelect";
 
 export const Route = createFileRoute("/patients/")({
   validateSearch: (search: Record<string, unknown>) => ({ q: (search['q'] as string) || "" }),
@@ -85,7 +86,7 @@ function PatientsPage() {
         />
       </Card>
 
-      <DataTable columns={["Name", "MRN", "Phone", "Age", "Gender", "Registered", ""]} rowCount={rows.length}>
+      <DataTable columns={["Name", "MRN", "Phone", "Age", "Gender", "Doctor", "Registered", ""]} rowCount={rows.length}>
         {rows.map((p) => (
           <tr key={p.id}>
             <Td>
@@ -97,6 +98,7 @@ function PatientsPage() {
             <Td>{p.phone || "—"}</Td>
             <Td>{ageFromDob(p.dob)}</Td>
             <Td>{p.gender}</Td>
+            <Td>{p.doctor || "—"}</Td>
             <Td>{fmtDate(p.createdAt)}</Td>
             <Td className="whitespace-nowrap">
               <button
