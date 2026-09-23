@@ -108,10 +108,22 @@
     background: #fff !important;
     padding: 0 !important;
     overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  .print-overlay-backdrop {
+    position: static !important;
+    padding: 0 !important;
+    background: #fff !important;
+    overflow: visible !important;
   }
 
   .no-print {
     display: none !important;
+  }
+
+  .print-body table {
+    page-break-inside: avoid;
   }
 
   @page {

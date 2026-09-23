@@ -11,6 +11,7 @@ import {
 } from "@/lib/hms/selectors";
 import { fmtDate, money } from "@/lib/hms/format";
 import { downloadCsv } from "@/lib/hms/csv";
+import { EXPENSE_CATEGORIES } from "@/lib/hms/types";
 import { Button, Card, Field, PageHeader, Select, Badge } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 import { PatientPicker } from "@/components/hms/pickers";
@@ -216,6 +217,53 @@ function ReportsPage() {
       count: paidRows.length,
     };
   }, [paidRows]);
+
+  const [expenseMode, setExpenseMode] = useState<"monthly" | "category">("monthly");
+
+  const expenseMonthly = useMemo(() => {
+    const months = new Map<string, number>();
+    for (const e of Object.values(state.expenses ?? {})) {
+      const key = (e.date || "").slice(0, 7);
+      if (!key || key === "NaN-NaN") continue;
+      months.set(key, (months.get(key) ?? 0) + Number(e.amount || 0));
+    }
+    return [...months.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [state.expenses]);
+
+  const expenseCategoryTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const cat of EXPENSE_CATEGORIES) map.set(cat, 0);
+    for (const e of Object.values(state.expenses ?? {})) {
+      const c = e.category || "Miscellaneous";
+      map.set(c, (map.get(c) ?? 0) + Number(e.amount || 0));
+    }
+    return [...map.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  }, [state.expenses]);
+
+  const expenseTotal = useMemo(
+    () => Object.values(state.expenses ?? {}).reduce((s, e) => s + Number(e.amount || 0), 0),
+    [state.expenses],
+  );
+
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split("-");
+    if (!y || !m) return key;
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    return `${months[Number(m) - 1]} ${y}`;
+  };
 
   const patient = patientId ? state.patients[patientId] : null;
   const pData = useMemo(() => {
@@ -435,6 +483,79 @@ function ReportsPage() {
             </p>
           ) : null}
         </div>
+      </Card>
+
+      {/* Expense summary */}
+      <Card>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Expense summary
+          </h2>
+          <Badge tone="amber">{money(expenseTotal)} all-time</Badge>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Hospital running costs entered on the Expenses page — monthly totals and category
+          breakdown.
+        </p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            variant={expenseMode === "monthly" ? "primary" : "outline"}
+            onClick={() => setExpenseMode("monthly")}
+          >
+            Monthly totals
+          </Button>
+          <Button
+            variant={expenseMode === "category" ? "primary" : "outline"}
+            onClick={() => setExpenseMode("category")}
+          >
+            By category
+          </Button>
+        </div>
+        {expenseMode === "monthly" ? (
+          <div className="max-h-80 overflow-auto rounded-md ring-1 ring-border/60">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-secondary">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Month</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Expenses</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Share</th>
+                </tr>
+              </thead>
+              <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+                {expenseMonthly.map(([key, total]) => (
+                  <tr key={key}>
+                    <td className="px-3 py-2 font-medium">{monthLabel(key)}</td>
+                    <td className="px-3 py-2">{money(total)}</td>
+                    <td className="px-3 py-2">
+                      {expenseTotal > 0 ? `${((total / expenseTotal) * 100).toFixed(0)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {expenseMonthly.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                      No expenses recorded yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {expenseCategoryTotals.map(([cat, total]) => (
+              <div key={cat} className="rounded-md bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">{cat}</p>
+                <p className="text-base font-semibold">{money(total)}</p>
+              </div>
+            ))}
+            {expenseCategoryTotals.length === 0 ? (
+              <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+                No expenses recorded yet.
+              </p>
+            ) : null}
+          </div>
+        )}
       </Card>
 
       <Card>

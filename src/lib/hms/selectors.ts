@@ -242,3 +242,31 @@ export function inRange(dateStr: string, range: RangeKey): boolean {
   cutoff.setDate(now.getDate() - days);
   return d >= new Date(cutoff.toDateString());
 }
+
+/** ---- OPD token queue ---- */
+
+/** Today's confirmed appointments, ordered 1..n by token number, in one pass. */
+export function todaysQueue(
+  appointments: HmsState["appointments"],
+  ref = todayISO(),
+): (HmsState["appointments"][string] & { tokenNo: number })[] {
+  const withToken: (HmsState["appointments"][string] & { tokenNo: number })[] = [];
+  const withoutToken: HmsState["appointments"][string][] = [];
+  for (const a of Object.values(appointments ?? {})) {
+    if (a.date !== ref || a.status !== "Confirmed") continue;
+    if (a.tokenNo) withToken.push(a as HmsState["appointments"][string] & { tokenNo: number });
+    else withoutToken.push(a);
+  }
+  withoutToken.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  let n = withToken.length;
+  for (const a of withoutToken) {
+    n += 1;
+    withToken.push({ ...a, tokenNo: n });
+  }
+  return withToken.sort((a, b) => a.tokenNo - b.tokenNo);
+}
+
+/** Count of patients currently waiting in today's OPD queue. */
+export function queueWaitingCount(appointments: HmsState["appointments"], ref = todayISO()) {
+  return todaysQueue(appointments, ref).filter((a) => a.status === "Confirmed").length;
+}
