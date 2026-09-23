@@ -2,7 +2,13 @@ import React, { useEffect } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+export function Card({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className={cn("rounded-lg bg-card p-5 shadow-sm ring-1 ring-border/60", className)}>
       {children}
@@ -77,12 +83,11 @@ export function Field({
 const inputCls =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/25";
 
-export const Input = React.forwardRef<
-  HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
->(function Input({ className, ...props }, ref) {
-  return <input ref={ref} {...props} className={cn(inputCls, className)} />;
-});
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className, ...props }, ref) {
+    return <input ref={ref} {...props} className={cn(inputCls, className)} />;
+  },
+);
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const { className, ...rest } = props;
@@ -137,7 +142,12 @@ export function Modal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 py-10">
-      <div className={cn("w-full rounded-lg bg-card shadow-xl", wide ? "max-w-3xl" : "max-w-xl")}>
+      <div
+        className={cn(
+          "w-full rounded-lg bg-card shadow-xl",
+          wide ? "max-w-3xl" : "max-w-xl",
+        )}
+      >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
           <h2 className="text-base font-semibold text-foreground">{title}</h2>
           <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted">
@@ -187,6 +197,12 @@ export function DataTable({
   );
 }
 
-export function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
+export function Td({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
   return <td className={cn("px-4 py-2.5 align-top text-foreground", className)}>{children}</td>;
 }

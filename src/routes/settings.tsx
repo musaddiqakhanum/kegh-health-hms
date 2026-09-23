@@ -1,28 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { packState, unpackState } from "@/lib/hms/pack";
 import { getPassphrase, setPassphrase } from "@/lib/hms/sync";
 import { downloadBlob } from "@/lib/hms/csv";
-import { fmtDateTime } from "@/lib/hms/format";
 import type { Role } from "@/lib/hms/types";
-import { Badge, Button, Card, Field, Input, PageHeader, Select } from "@/components/hms/ui";
+import { Button, Card, Field, Input, PageHeader, Select } from "@/components/hms/ui";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings — KEGH HMS" },
-      {
-        name: "description",
-        content: "Hospital profile, device role, PIN lock, backups and encryption.",
-      },
+      { name: "description", content: "Hospital profile, device role, PIN lock, backups and encryption." },
       { property: "og:title", content: "Settings — KEGH HMS" },
-      {
-        property: "og:description",
-        content: "Hospital profile, device role, PIN lock, backups and encryption.",
-      },
+      { property: "og:description", content: "Hospital profile, device role, PIN lock, backups and encryption." },
     ],
   }),
   component: SettingsPage,
@@ -34,15 +27,8 @@ function SettingsPage() {
   const { settings, updateSettings, state, mergeIn } = useHms();
   const [pin, setPin] = useState(settings.pin);
   const [pass, setPass] = useState(getPassphrase());
+  const [newDoctor, setNewDoctor] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const auditEntries = useMemo(
-    () =>
-      Object.values(state.auditLogs ?? {})
-        .sort((a, b) => b.timestamp - a.timestamp || b.createdAt - a.createdAt)
-        .slice(0, 50),
-    [state.auditLogs],
-  );
 
   const exportKeg = async () => {
     try {
@@ -76,28 +62,16 @@ function SettingsPage() {
         <h2 className="font-semibold">Hospital profile</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Hospital name">
-            <Input
-              value={settings.hospitalName}
-              onChange={(e) => updateSettings({ hospitalName: e.target.value })}
-            />
+            <Input value={settings.hospitalName} onChange={(e) => updateSettings({ hospitalName: e.target.value })} />
           </Field>
           <Field label="Phone">
-            <Input
-              value={settings.hospitalPhone}
-              onChange={(e) => updateSettings({ hospitalPhone: e.target.value })}
-            />
+            <Input value={settings.hospitalPhone} onChange={(e) => updateSettings({ hospitalPhone: e.target.value })} />
           </Field>
           <Field label="Address" className="sm:col-span-2">
-            <Input
-              value={settings.hospitalAddress}
-              onChange={(e) => updateSettings({ hospitalAddress: e.target.value })}
-            />
+            <Input value={settings.hospitalAddress} onChange={(e) => updateSettings({ hospitalAddress: e.target.value })} />
           </Field>
           <Field label="Registration number">
-            <Input
-              value={settings.registrationNumber}
-              onChange={(e) => updateSettings({ registrationNumber: e.target.value })}
-            />
+            <Input value={settings.registrationNumber} onChange={(e) => updateSettings({ registrationNumber: e.target.value })} />
           </Field>
         </div>
       </Card>
@@ -106,23 +80,62 @@ function SettingsPage() {
         <h2 className="font-semibold">This device</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Device name">
-            <Input
-              placeholder="Reception PC"
-              value={settings.deviceName}
-              onChange={(e) => updateSettings({ deviceName: e.target.value })}
-            />
+            <Input placeholder="Reception PC" value={settings.deviceName} onChange={(e) => updateSettings({ deviceName: e.target.value })} />
           </Field>
           <Field label="Role">
-            <Select
-              value={settings.role}
-              onChange={(e) => updateSettings({ role: e.target.value as Role })}
-            >
-              {ROLES.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
+            <Select value={settings.role} onChange={(e) => updateSettings({ role: e.target.value as Role })}>
+              {ROLES.map((r) => <option key={r}>{r}</option>)}
             </Select>
           </Field>
         </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="font-semibold">Doctors</h2>
+        <p className="text-xs text-muted-foreground">
+          These names appear in the doctor list on patient and visit forms.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Doctor name">
+            <Input placeholder="Dr. Full Name" value={newDoctor} onChange={(e) => setNewDoctor(e.target.value)} />
+          </Field>
+          <Button
+            onClick={() => {
+              const clean = newDoctor.trim();
+              if (!clean) { toast.error("Enter the doctor's name"); return; }
+              const list = settings.doctors ?? [];
+              if (list.some((d) => d.toLowerCase() === clean.toLowerCase())) {
+                toast.error("That doctor is already on the list");
+                return;
+              }
+              updateSettings({ doctors: [...list, clean].sort((a, b) => a.localeCompare(b)) });
+              setNewDoctor("");
+              toast.success(`${clean} added`);
+            }}
+          >
+            Add doctor
+          </Button>
+        </div>
+        {(settings.doctors ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No doctors added yet.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-md ring-1 ring-border/60">
+            {(settings.doctors ?? []).map((d) => (
+              <li key={d} className="flex items-center justify-between px-3 py-2 text-sm">
+                <span>{d}</span>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    updateSettings({ doctors: (settings.doctors ?? []).filter((x) => x !== d) });
+                    toast.success(`${d} removed`);
+                  }}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card className="space-y-4">
@@ -138,24 +151,14 @@ function SettingsPage() {
           </Field>
           <Button
             onClick={() => {
-              if (pin && pin.length !== 4) {
-                toast.error("PIN must be 4 digits");
-                return;
-              }
+              if (pin && pin.length !== 4) { toast.error("PIN must be 4 digits"); return; }
               updateSettings({ pin });
               toast.success(pin ? "PIN saved — required next time the app opens" : "PIN removed");
             }}
           >
             Save PIN
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setPin("");
-              updateSettings({ pin: "" });
-              toast.success("PIN cleared");
-            }}
-          >
+          <Button variant="outline" onClick={() => { setPin(""); updateSettings({ pin: "" }); toast.success("PIN cleared"); }}>
             Clear PIN
           </Button>
         </div>
@@ -178,9 +181,7 @@ function SettingsPage() {
               type="number"
               min={1}
               value={settings.syncIntervalMinutes}
-              onChange={(e) =>
-                updateSettings({ syncIntervalMinutes: Math.max(1, Number(e.target.value)) })
-              }
+              onChange={(e) => updateSettings({ syncIntervalMinutes: Math.max(1, Number(e.target.value)) })}
             />
           </Field>
           <Field label="Encrypt backups (AES-256-GCM)">
@@ -196,10 +197,7 @@ function SettingsPage() {
             <Input
               type="password"
               value={pass}
-              onChange={(e) => {
-                setPass(e.target.value);
-                setPassphrase(e.target.value);
-              }}
+              onChange={(e) => { setPass(e.target.value); setPassphrase(e.target.value); }}
             />
           </Field>
         </div>
@@ -211,9 +209,7 @@ function SettingsPage() {
       <Card className="space-y-4">
         <h2 className="font-semibold">Manual backup</h2>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={exportKeg}>
-            <Download className="h-4 w-4" /> Export .keg
-          </Button>
+          <Button onClick={exportKeg}><Download className="h-4 w-4" /> Export .keg</Button>
           <Button variant="outline" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4" /> Import &amp; merge .keg
           </Button>
@@ -230,61 +226,6 @@ function SettingsPage() {
           />
         </div>
       </Card>
-
-      {settings.role === "Admin" ? (
-        <Card className="space-y-4">
-          <div>
-            <h2 className="font-semibold">Audit log</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Last {auditEntries.length} write{auditEntries.length === 1 ? "" : "s"} across all
-              synced devices — creations, updates and deletions.
-            </p>
-          </div>
-          {auditEntries.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No audit entries yet. They appear here as records are created, updated or deleted.
-            </p>
-          ) : (
-            <div className="max-h-96 overflow-auto rounded-md ring-1 ring-border/60">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead className="sticky top-0 bg-secondary">
-                  <tr>
-                    {["Time", "Action", "Collection", "Record", "Device", "Role"].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
-                  {auditEntries.map((a) => (
-                    <tr key={a.id}>
-                      <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(a.timestamp)}</td>
-                      <td className="px-3 py-2">
-                        <Badge
-                          tone={
-                            a.action === "create"
-                              ? "green"
-                              : a.action === "delete"
-                                ? "red"
-                                : "amber"
-                          }
-                        >
-                          {a.action}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2">{a.collection}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{a.recordId.slice(0, 8)}</td>
-                      <td className="px-3 py-2">{a.deviceName}</td>
-                      <td className="px-3 py-2">{a.role}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      ) : null}
     </div>
   );
 }

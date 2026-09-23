@@ -119,13 +119,7 @@ function Splash() {
   return (
     <div className="flex min-h-screen items-center justify-center sidebar-gradient">
       <div className="flex flex-col items-center gap-3">
-        <img
-          src={keghLogo.url}
-          alt="KEGH LLP"
-          width={96}
-          height={96}
-          className="h-24 w-24 animate-pulse rounded-xl bg-white p-2"
-        />
+        <img src={keghLogo.url} alt="KEGH LLP" width={96} height={96} className="h-24 w-24 animate-pulse rounded-xl bg-white p-2" />
         <p className="text-sm font-semibold tracking-[0.3em] text-white/80">KEGH LLP</p>
       </div>
     </div>

@@ -1,18 +1,6 @@
 import { emptyState, type Collection, type HmsState } from "./types";
 
-const COLLECTIONS: Collection[] = [
-  "patients",
-  "visits",
-  "labs",
-  "rads",
-  "pharms",
-  "bills",
-  "appointments",
-  "doctorSchedules",
-  "prescriptions",
-  "expenses",
-  "auditLogs",
-];
+const COLLECTIONS: Collection[] = ["patients", "visits", "labs", "rads", "pharms", "bills"];
 
 /** Merge two states: newest write per record wins; tombstones respected. */
 export function mergeStates(a: HmsState, b: HmsState): HmsState {

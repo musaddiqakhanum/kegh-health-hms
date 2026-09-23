@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Menu, Search, Wifi, WifiOff, X, Shield } from "lucide-react";
+import { Menu, Search, Wifi, WifiOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
@@ -11,26 +11,12 @@ import { Button, Input } from "./ui";
 import { cn } from "@/lib/utils";
 import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
-function PinLock({
-  pin,
-  onUnlock,
-  onForgot,
-}: {
-  pin: string;
-  onUnlock: () => void;
-  onForgot: () => void;
-}) {
+function PinLock({ pin, onUnlock, onForgot }: { pin: string; onUnlock: () => void; onForgot: () => void }) {
   const [value, setValue] = useState("");
   return (
     <div className="flex min-h-screen items-center justify-center sidebar-gradient px-4">
       <div className="w-full max-w-xs rounded-lg bg-white p-6 text-center shadow-xl">
-        <img
-          src={keghLogo.url}
-          alt="KEGH LLP"
-          width={56}
-          height={56}
-          className="mx-auto mb-3 h-14 w-14 object-contain"
-        />
+        <img src={keghLogo.url} alt="KEGH LLP" width={56} height={56} className="mx-auto mb-3 h-14 w-14 object-contain" />
         <h1 className="text-lg font-semibold text-[#0b3a44]">KEGH HMS</h1>
         <p className="mb-4 text-sm text-slate-500">Enter your 4-digit PIN</p>
         <Input
@@ -79,11 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (
-        e.key === "/" &&
-        document.activeElement?.tagName !== "INPUT" &&
-        document.activeElement?.tagName !== "TEXTAREA"
-      ) {
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
         e.preventDefault();
         searchRef.current?.focus();
       }
@@ -115,13 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center sidebar-gradient">
-        <img
-          src={keghLogo.url}
-          alt="KEGH LLP"
-          width={96}
-          height={96}
-          className="h-24 w-24 animate-pulse rounded-xl bg-white p-2"
-        />
+        <img src={keghLogo.url} alt="KEGH LLP" width={96} height={96} className="h-24 w-24 animate-pulse rounded-xl bg-white p-2" />
       </div>
     );
   }
@@ -141,19 +117,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const items = navForRole(settings.role);
-  const bottomNav = items.slice(0, 5);
 
   const sidebar = (
     <aside className="sidebar-gradient flex h-full w-[236px] shrink-0 flex-col text-white">
       <div className="flex items-center gap-3 px-5 py-5">
-        <img
-          src={keghLogo.url}
-          alt="KEGH LLP"
-          width={40}
-          height={40}
-          className="h-10 w-10 rounded-lg bg-white object-contain p-0.5"
-        />
-        <div className="min-w-0">
+        <img src={keghLogo.url} alt="KEGH LLP" width={40} height={40} className="h-10 w-10 rounded-lg bg-white object-contain p-0.5" />
+        <div>
           <p className="text-lg font-bold leading-tight">KEGH</p>
           <p className="text-xs text-white/70">Health Records</p>
         </div>
@@ -161,24 +130,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <X className="h-5 w-5" />
         </button>
       </div>
-
-      <div className="mx-3 mb-3 rounded-md bg-white/10 px-3 py-2.5">
-        <div className="flex items-center gap-2 text-xs">
-          <Shield className="h-3.5 w-3.5 text-white/80" />
-          <span className="font-medium truncate">{settings.role} portal</span>
-          <span className="ml-auto flex items-center gap-1 text-white/60">
-            {online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {online ? "Online" : "Offline"}
-          </span>
-        </div>
-        <p className="mt-1 truncate text-xs text-white/60">
-          {settings.deviceName || "This Device"}
-        </p>
-        <p className="truncate text-[11px] text-white/50">
-          {settings.hospitalName || "KEGH LLP"} · .keg sync
-        </p>
-      </div>
-
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {items.map((item) => {
           const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -203,7 +154,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {online ? "Online" : "Offline"} · {settings.role}
         </div>
         <p className="mt-1 truncate">{settings.deviceName}</p>
-        <p className="mt-1 text-[11px] text-white/50">PWA offline ready · Drive .keg</p>
       </div>
     </aside>
   );
@@ -218,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3">
           <button className="md:hidden" onClick={() => setDrawer(true)}>
             <Menu className="h-5 w-5" />
@@ -235,39 +185,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search patient name, MRN or phone (press /)"
+              placeholder="Search patient name, MRN or phone  (press /)"
               className="pl-9"
             />
           </form>
           <span className="ml-auto hidden text-sm font-medium text-muted-foreground sm:block">
             {settings.hospitalName}
           </span>
-          <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-            {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-            {online ? "Online" : "Offline"}
-          </span>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
-
-        {/* Mobile bottom navigation - responsive PWA pattern */}
-        <nav className="no-print fixed bottom-0 left-0 right-0 z-30 flex border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:hidden">
-          {bottomNav.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.key}
-                to={item.to}
-                className={cn(
-                  "flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-medium",
-                  active ? "text-primary" : "text-muted-foreground",
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                <span className="truncate max-w-[60px]">{item.label.split(" ")[0]}</span>
-              </Link>
-            );
-          })}
-        </nav>
       </div>
     </div>
   );

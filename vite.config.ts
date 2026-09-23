@@ -14,7 +14,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    server: { allowedHosts: true },
     plugins: [
       VitePWA({
         registerType: "autoUpdate",

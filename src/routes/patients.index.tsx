@@ -7,34 +7,18 @@ import { searchPatients } from "@/lib/hms/selectors";
 import { ageFromDob, fmtDate } from "@/lib/hms/format";
 import { nextMrn } from "@/lib/hms/mrn";
 import type { Patient } from "@/lib/hms/types";
-import {
-  Button,
-  Card,
-  DataTable,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  Select,
-  Td,
-  Textarea,
-} from "@/components/hms/ui";
+import { Button, Card, DataTable, Field, Input, Modal, PageHeader, Select, Td, Textarea } from "@/components/hms/ui";
 import { confirmDelete } from "@/components/hms/pickers";
+import { DoctorSelect } from "@/components/hms/DoctorSelect";
 
 export const Route = createFileRoute("/patients/")({
-  validateSearch: (search: Record<string, unknown>) => ({ q: (search["q"] as string) || "" }),
+  validateSearch: (search: Record<string, unknown>) => ({ q: (search['q'] as string) || "" }),
   head: () => ({
     meta: [
       { title: "Patients — KEGH HMS" },
-      {
-        name: "description",
-        content: "Register and search hospital patients by name, MRN or phone.",
-      },
+      { name: "description", content: "Register and search hospital patients by name, MRN or phone." },
       { property: "og:title", content: "Patients — KEGH HMS" },
-      {
-        property: "og:description",
-        content: "Register and search hospital patients by name, MRN or phone.",
-      },
+      { property: "og:description", content: "Register and search hospital patients by name, MRN or phone." },
     ],
   }),
   component: PatientsPage,
@@ -49,6 +33,7 @@ const blank = (): Partial<Patient> => ({
   fatherName: "",
   bloodGroup: "",
   allergies: "",
+  doctor: "",
 });
 
 function PatientsPage() {
@@ -69,14 +54,8 @@ function PatientsPage() {
   const set = (k: keyof Patient, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
-    if (!form.name?.trim()) {
-      toast.error("Patient name is required");
-      return;
-    }
-    if (!form.dob) {
-      toast.error("Date of birth is required");
-      return;
-    }
+    if (!form.name?.trim()) { toast.error("Patient name is required"); return; }
+    if (!form.dob) { toast.error("Date of birth is required"); return; }
     upsert<Patient>("patients", { ...form, mrn: form.mrn || nextMrn(state) } as Patient);
     toast.success(form.id ? "Patient updated" : "Patient registered");
     setOpen(false);
@@ -107,18 +86,11 @@ function PatientsPage() {
         />
       </Card>
 
-      <DataTable
-        columns={["Name", "MRN", "Phone", "Age", "Gender", "Registered", ""]}
-        rowCount={rows.length}
-      >
+      <DataTable columns={["Name", "MRN", "Phone", "Age", "Gender", "Doctor", "Registered", ""]} rowCount={rows.length}>
         {rows.map((p) => (
           <tr key={p.id}>
             <Td>
-              <Link
-                to="/patients/$patientId"
-                params={{ patientId: p.id }}
-                className="font-medium text-accent underline"
-              >
+              <Link to="/patients/$patientId" params={{ patientId: p.id }} className="font-medium text-accent underline">
                 {p.name}
               </Link>
             </Td>
@@ -126,6 +98,7 @@ function PatientsPage() {
             <Td>{p.phone || "—"}</Td>
             <Td>{ageFromDob(p.dob)}</Td>
             <Td>{p.gender}</Td>
+            <Td>{p.doctor || "—"}</Td>
             <Td>{fmtDate(p.createdAt)}</Td>
             <Td className="whitespace-nowrap">
               <button
@@ -153,22 +126,13 @@ function PatientsPage() {
         ))}
       </DataTable>
 
-      <Modal
-        open={open}
-        title={form.id ? "Edit patient" : "Register patient"}
-        onClose={() => setOpen(false)}
-        wide
-      >
+      <Modal open={open} title={form.id ? "Edit patient" : "Register patient"} onClose={() => setOpen(false)} wide>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full name" required>
             <Input value={form.name ?? ""} onChange={(e) => set("name", e.target.value)} />
           </Field>
           <Field label="Date of birth" required>
-            <Input
-              type="date"
-              value={form.dob ?? ""}
-              onChange={(e) => set("dob", e.target.value)}
-            />
+            <Input type="date" value={form.dob ?? ""} onChange={(e) => set("dob", e.target.value)} />
           </Field>
           <Field label="Gender">
             <Select value={form.gender ?? "M"} onChange={(e) => set("gender", e.target.value)}>
@@ -180,17 +144,14 @@ function PatientsPage() {
           <Field label="Phone">
             <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
           </Field>
+          <Field label="Assigned doctor" className="sm:col-span-2">
+            <DoctorSelect value={form.doctor ?? ""} onChange={(d) => set("doctor", d)} />
+          </Field>
           <Field label="Father / guardian name">
-            <Input
-              value={form.fatherName ?? ""}
-              onChange={(e) => set("fatherName", e.target.value)}
-            />
+            <Input value={form.fatherName ?? ""} onChange={(e) => set("fatherName", e.target.value)} />
           </Field>
           <Field label="Blood group">
-            <Select
-              value={form.bloodGroup ?? ""}
-              onChange={(e) => set("bloodGroup", e.target.value)}
-            >
+            <Select value={form.bloodGroup ?? ""} onChange={(e) => set("bloodGroup", e.target.value)}>
               <option value="">Unknown</option>
               {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((b) => (
                 <option key={b} value={b}>
@@ -203,10 +164,7 @@ function PatientsPage() {
             <Textarea value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
           </Field>
           <Field label="Allergies" className="sm:col-span-2">
-            <Textarea
-              value={form.allergies ?? ""}
-              onChange={(e) => set("allergies", e.target.value)}
-            />
+            <Textarea value={form.allergies ?? ""} onChange={(e) => set("allergies", e.target.value)} />
           </Field>
         </div>
         <div className="mt-5 flex justify-end gap-2">

@@ -11,6 +11,8 @@ export interface Patient {
   fatherName: string;
   bloodGroup: string;
   allergies: string;
+  /** assigned / consulting doctor */
+  doctor: string;
   createdAt: number;
 }
 
@@ -256,6 +258,8 @@ export interface Settings {
   deviceName: string;
   deviceId: string;
   role: Role;
+  /** doctors available for selection across the app */
+  doctors: string[];
   pin: string;
   autoSync: boolean;
   syncIntervalMinutes: number;
@@ -290,6 +294,7 @@ export const defaultSettings = (): Settings => ({
   deviceName: "This Device",
   deviceId: "",
   role: "Admin",
+  doctors: [],
   pin: "",
   autoSync: true,
   syncIntervalMinutes: 10,

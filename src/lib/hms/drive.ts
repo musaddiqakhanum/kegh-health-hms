@@ -8,25 +8,9 @@ interface StoredToken {
   expiresAt: number;
 }
 
-interface GoogleIdentityServices {
-  accounts?: {
-    oauth2?: {
-      initTokenClient: (options: {
-        client_id: string;
-        scope: string;
-        callback: (response: {
-          access_token?: string;
-          expires_in?: number;
-          error?: string;
-        }) => void;
-      }) => { requestAccessToken: (options: { prompt?: string }) => void };
-    };
-  };
-}
-
 declare global {
   interface Window {
-    google?: GoogleIdentityServices;
+    google?: any;
   }
 }
 

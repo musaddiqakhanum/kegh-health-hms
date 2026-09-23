@@ -27,11 +27,8 @@ export function PrintOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4 print-overlay-backdrop">
-      <div
-        id="print-overlay"
-        className="mx-auto max-w-4xl rounded-lg bg-white p-8 text-slate-900 shadow-xl"
-      >
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
+      <div id="print-overlay" className="mx-auto max-w-4xl rounded-lg bg-white p-8 text-slate-900 shadow-xl">
         <div className="no-print mb-4 flex justify-end gap-2">
           <Button onClick={() => window.print()}>
             <Printer className="h-4 w-4" /> Print
@@ -42,24 +39,16 @@ export function PrintOverlay({
         </div>
 
         <header className="mb-5 flex items-center gap-4 border-b-2 border-slate-800 pb-3">
-          <img
-            src={keghLogo.url}
-            alt=""
-            width={64}
-            height={64}
-            className="h-16 w-16 object-contain"
-          />
+          <img src={keghLogo.url} alt="" width={64} height={64} className="h-16 w-16 object-contain" />
           <div className="flex-1 text-center">
-            <h1 className="text-xl font-bold uppercase tracking-wide">
-              {settings.hospitalName || "KEGH LLP"}
-            </h1>
-            {settings.hospitalAddress ? (
-              <p className="text-sm">{settings.hospitalAddress}</p>
-            ) : null}
-            <p className="text-sm">
-              {settings.hospitalPhone ? `Phone: ${settings.hospitalPhone}` : ""}
-              {settings.registrationNumber ? ` · Reg. No: ${settings.registrationNumber}` : ""}
-            </p>
+          <h1 className="text-xl font-bold uppercase tracking-wide">
+            {settings.hospitalName || "KEGH LLP"}
+          </h1>
+          {settings.hospitalAddress ? <p className="text-sm">{settings.hospitalAddress}</p> : null}
+          <p className="text-sm">
+            {settings.hospitalPhone ? `Phone: ${settings.hospitalPhone}` : ""}
+            {settings.registrationNumber ? ` · Reg. No: ${settings.registrationNumber}` : ""}
+          </p>
           </div>
         </header>
 
