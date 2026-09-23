@@ -32,6 +32,7 @@ const blank = (): Partial<Patient> => ({
   fatherName: "",
   bloodGroup: "",
   allergies: "",
+  doctor: "",
 });
 
 function PatientsPage() {
