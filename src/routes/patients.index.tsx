@@ -142,6 +142,9 @@ function PatientsPage() {
           <Field label="Phone">
             <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
           </Field>
+          <Field label="Assigned doctor" className="sm:col-span-2">
+            <DoctorSelect value={form.doctor ?? ""} onChange={(d) => set("doctor", d)} />
+          </Field>
           <Field label="Father / guardian name">
             <Input value={form.fatherName ?? ""} onChange={(e) => set("fatherName", e.target.value)} />
           </Field>

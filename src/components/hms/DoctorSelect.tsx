@@ -10,8 +10,14 @@ export function DoctorSelect({
   value: string;
   onChange: (name: string) => void;
 }) {
-  const { settings, updateSettings } = useHms();
-  const doctors = settings.doctors ?? [];
+  const { settings, updateSettings, state } = useHms();
+  const doctors = Array.from(
+    new Set([
+      ...(settings.doctors ?? []),
+      ...Object.values(state.visits).map((v) => v.doctor).filter(Boolean),
+      ...Object.values(state.patients).map((p) => p.doctor).filter(Boolean),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
 
