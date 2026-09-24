@@ -24,6 +24,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as SyncRouteImport } from './routes/sync'
 import { Route as VisitsRouteImport } from './routes/visits'
+import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as PatientsIndexRouteImport } from './routes/patients.index'
 import { Route as PatientsPatientIdRouteImport } from './routes/patients.$patientId'
 
@@ -102,6 +103,11 @@ const VisitsRoute = VisitsRouteImport.update({
   path: '/visits',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspaceRoute = WorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatientsIndexRoute = PatientsIndexRouteImport.update({
   id: '/patients/',
   path: '/patients/',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
+  '/workspace': typeof WorkspaceRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients/': typeof PatientsIndexRoute
 }
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
+  '/workspace': typeof WorkspaceRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients': typeof PatientsIndexRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/sync': typeof SyncRoute
   '/visits': typeof VisitsRoute
+  '/workspace': typeof WorkspaceRoute
   '/patients/$patientId': typeof PatientsPatientIdRoute
   '/patients/': typeof PatientsIndexRoute
 }
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/sync'
     | '/visits'
+    | '/workspace'
     | '/patients/$patientId'
     | '/patients/'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/sync'
     | '/visits'
+    | '/workspace'
     | '/patients/$patientId'
     | '/patients'
   id:
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/sync'
     | '/visits'
+    | '/workspace'
     | '/patients/$patientId'
     | '/patients/'
   fileRoutesById: FileRoutesById
@@ -247,6 +259,7 @@ export interface RootRouteChildren {
   StaffRoute: typeof StaffRoute
   SyncRoute: typeof SyncRoute
   VisitsRoute: typeof VisitsRoute
+  WorkspaceRoute: typeof WorkspaceRoute
   PatientsPatientIdRoute: typeof PatientsPatientIdRoute
   PatientsIndexRoute: typeof PatientsIndexRoute
 }
@@ -358,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VisitsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspace': {
+      id: '/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof WorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patients/': {
       id: '/patients/'
       path: '/patients'
@@ -391,6 +411,7 @@ const rootRouteChildren: RootRouteChildren = {
   StaffRoute: StaffRoute,
   SyncRoute: SyncRoute,
   VisitsRoute: VisitsRoute,
+  WorkspaceRoute: WorkspaceRoute,
   PatientsPatientIdRoute: PatientsPatientIdRoute,
   PatientsIndexRoute: PatientsIndexRoute,
 }

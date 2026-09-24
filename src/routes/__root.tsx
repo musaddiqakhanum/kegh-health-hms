@@ -14,6 +14,7 @@ import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { HmsProvider } from "@/lib/hms/store";
+import { SessionProvider } from "@/lib/hms/session";
 import { AppShell } from "@/components/hms/AppShell";
 import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
@@ -133,10 +134,12 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ClientOnly fallback={<Splash />}>
         <HmsProvider>
-          <AppShell>
-            {/* Required: nested routes render here. */}
-            <Outlet />
-          </AppShell>
+          <SessionProvider>
+            <AppShell>
+              {/* Required: nested routes render here. */}
+              <Outlet />
+            </AppShell>
+          </SessionProvider>
         </HmsProvider>
       </ClientOnly>
       <Toaster position="bottom-right" richColors closeButton />

@@ -1,13 +1,16 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Menu, Search, Wifi, WifiOff, X } from "lucide-react";
+import { LogOut, Menu, Search, Wifi, WifiOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
+import { useSession } from "@/lib/hms/useSession";
 import { getStoredToken } from "@/lib/hms/drive";
 import { runSync } from "@/lib/hms/sync";
+import { activeUsers } from "@/lib/hms/selectors";
 import { navForRole } from "./nav";
 import { registerAppServiceWorker } from "@/lib/hms/register-sw";
-import { Button, Input } from "./ui";
+import { LoginScreen } from "./LoginScreen";
+import { Badge, Button, Input } from "./ui";
 import { cn } from "@/lib/utils";
 import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
@@ -49,6 +52,7 @@ function PinLock({ pin, onUnlock, onForgot }: { pin: string; onUnlock: () => voi
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { settings, updateSettings, online, ready, state, mergeIn } = useHms();
+  const { user, logout } = useSession();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [drawer, setDrawer] = useState(false);
@@ -116,7 +120,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const items = navForRole(settings.role);
+  // Staff login gate: required AND at least one active account exists. With
+  // zero users the app keeps its first-run behaviour (role dropdown + PIN).
+  if (settings.requireLogin && activeUsers(state).length > 0 && !user) {
+    return <LoginScreen />;
+  }
+
+  // The signed-in user's role drives the nav; otherwise the device role, as
+  // before. No per-route gates — nav hiding and AdminOnly do the gating.
+  const role = user ? user.role : settings.role;
+  const items = navForRole(role);
 
   const sidebar = (
     <aside className="sidebar-gradient flex h-full w-[236px] shrink-0 flex-col text-white">
@@ -148,12 +161,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
-      <div className="border-t border-white/15 px-5 py-3 text-xs text-white/75">
-        <div className="flex items-center gap-2">
+      <div className="border-t border-white/15 px-4 py-3 text-xs text-white/75">
+        <div className="flex items-center gap-2 px-1">
           {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-          {online ? "Online" : "Offline"} · {settings.role}
+          {online ? "Online" : "Offline"} · {role}
         </div>
-        <p className="mt-1 truncate">{settings.deviceName}</p>
+        <p className="mt-1 truncate px-1">{settings.deviceName}</p>
+        {user ? (
+          <div className="mt-2 flex items-center gap-2 rounded-md bg-white/10 px-2.5 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-white">{user.displayName}</p>
+              <p className="truncate text-white/70">{user.role}</p>
+            </div>
+            <button
+              className="flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+              onClick={() => {
+                logout();
+                toast.success(`Signed out as ${user.displayName}`);
+              }}
+              title="Log out"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Log out
+            </button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );
@@ -189,9 +220,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="pl-9"
             />
           </form>
-          <span className="ml-auto hidden text-sm font-medium text-muted-foreground sm:block">
-            {settings.hospitalName}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden text-sm font-medium text-muted-foreground sm:block">
+              {settings.hospitalName}
+            </span>
+            {user ? (
+              <>
+                <span className="hidden text-sm font-medium text-foreground md:block">
+                  {user.displayName}
+                </span>
+                <Badge tone="neutral">{user.role}</Badge>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    logout();
+                    toast.success(`Signed out as ${user.displayName}`);
+                  }}
+                >
+                  <LogOut className="h-4 w-4" /> Log out
+                </Button>
+              </>
+            ) : null}
+          </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>

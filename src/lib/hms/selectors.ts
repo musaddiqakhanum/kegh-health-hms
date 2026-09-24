@@ -2,6 +2,7 @@ import {
   EXPENSE_CATEGORIES,
   type Appointment,
   type AppointmentStatus,
+  type Bill,
   type DoctorSchedule,
   type Expense,
   type HmsState,
@@ -9,6 +10,7 @@ import {
   type PayrollEntry,
   type Prescription,
   type Staff,
+  type User,
   type Visit,
 } from "./types";
 import { isSameDay, todayISO } from "./format";
@@ -127,6 +129,115 @@ export function hasLeft(staff: Staff): boolean {
 
 export function sortStaffByName(rows: Staff[]): Staff[] {
   return [...rows].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+}
+
+/* ----------------------------------------------------------------- users */
+
+/** All staff accounts, sorted by username (case-insensitive order). */
+export function userList(state: HmsState): User[] {
+  return Object.values(state.users ?? {}).sort((a, b) =>
+    (a.username || "").localeCompare(b.username || "", undefined, { sensitivity: "base" }),
+  );
+}
+
+/** Accounts that can currently sign in. */
+export function activeUsers(state: HmsState): User[] {
+  return userList(state).filter((u) => u.active);
+}
+
+/** Case-insensitive username lookup — usernames are unique per list. */
+export function findUserByUsername(state: HmsState, username: string): User | undefined {
+  const s = (username || "").trim().toLowerCase();
+  if (!s) return undefined;
+  return Object.values(state.users ?? {}).find(
+    (u) => (u.username || "").trim().toLowerCase() === s,
+  );
+}
+
+/** Display name of a linked staff record, for the Users section in Settings. */
+export function staffNameFor(state: HmsState, staffId?: string): string {
+  const id = (staffId || "").trim();
+  if (!id) return "—";
+  return state.staff[id]?.name ?? "—";
+}
+
+/* ------------------------------------------------------------- workspaces */
+
+/** Case-insensitive match of a user's display name against a doctor field. */
+export function doctorMatches(displayName: string, doctor?: string): boolean {
+  const a = (displayName || "").trim().toLowerCase();
+  const b = (doctor || "").trim().toLowerCase();
+  return Boolean(a) && a === b;
+}
+
+/** The doctor's OPD queue today: checked-in tokens for that doctor, token order. */
+export function myTodayQueue(state: HmsState, user: User): Appointment[] {
+  const today = todayISO();
+  return Object.values(state.appointments ?? {})
+    .filter(
+      (a) =>
+        a.date === today && a.status === "CheckedIn" && doctorMatches(user.displayName, a.doctor),
+    )
+    .sort((a, b) => Number(a.tokenNo ?? 0) - Number(b.tokenNo ?? 0));
+}
+
+/** The doctor's open appointments today (scheduled / confirmed / checked in), time order. */
+export function myTodayAppointments(state: HmsState, user: User): Appointment[] {
+  const today = todayISO();
+  return Object.values(state.appointments ?? {})
+    .filter(
+      (a) =>
+        a.date === today &&
+        OPEN_STATUSES.includes(a.status) &&
+        doctorMatches(user.displayName, a.doctor),
+    )
+    .sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.createdAt - b.createdAt);
+}
+
+/** Patients the doctor has seen most recently (newest visit first, unique patients). */
+export function myRecentPatients(
+  state: HmsState,
+  user: User,
+  limit = 6,
+): { patient: Patient; visit: Visit }[] {
+  const visits = sortByDateDesc(
+    Object.values(state.visits ?? {}).filter((v) => doctorMatches(user.displayName, v.doctor)),
+  );
+  const seen = new Set<string>();
+  const out: { patient: Patient; visit: Visit }[] = [];
+  for (const visit of visits) {
+    if (seen.has(visit.patientId)) continue;
+    const patient = state.patients[visit.patientId];
+    if (!patient) continue;
+    seen.add(visit.patientId);
+    out.push({ patient, visit });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Bills still owing money, newest first. `partial` = some payment received. */
+export interface DueBill {
+  bill: Bill;
+  patientName: string;
+  partial: boolean;
+}
+
+export function dueBills(state: HmsState): DueBill[] {
+  return sortByDateDesc(Object.values(state.bills ?? {}).filter((b) => Number(b.due ?? 0) > 0)).map(
+    (bill) => ({
+      bill,
+      patientName: state.patients[bill.patientId]?.name ?? "—",
+      partial: Number(bill.paid ?? 0) > 0,
+    }),
+  );
+}
+
+/** Money collected today (sum of `paid` on bills dated today). */
+export function todayCollection(state: HmsState): number {
+  return Object.values(state.bills ?? {})
+    .filter((b) => isSameDay(b.date))
+    .reduce((s, b) => s + Number(b.paid || 0), 0);
 }
 
 /* --------------------------------------------------------------- payroll */

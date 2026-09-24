@@ -6,6 +6,7 @@ import {
   FlaskConical,
   IndianRupee,
   LayoutDashboard,
+  LayoutGrid,
   ListOrdered,
   Pill,
   Receipt,
@@ -27,6 +28,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  { to: "/workspace", label: "My workspace", icon: LayoutGrid, key: "workspace" },
   { to: "/", label: "Dashboard", icon: LayoutDashboard, key: "dash" },
   { to: "/patients", label: "Patients", icon: Users, key: "patients" },
   { to: "/appointments", label: "Appointments", icon: CalendarDays, key: "appointments" },
@@ -47,9 +49,11 @@ export const NAV_ITEMS: NavItem[] = [
 
 const ROLE_KEYS: Record<Role, string[] | "all"> = {
   // Admin sees everything, including staff salaries, payroll and expenses.
+  // "My workspace" redirects to the usual dashboard for Admin.
   Admin: "all",
   // Reception runs the front desk: appointments and the OPD token queue.
   Reception: [
+    "workspace",
     "dash",
     "patients",
     "appointments",
@@ -60,6 +64,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "settings",
   ],
   Doctor: [
+    "workspace",
     "dash",
     "patients",
     "appointments",
@@ -71,9 +76,9 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "pharms",
     "settings",
   ],
-  Lab: ["dash", "patients", "labs", "reports", "settings"],
-  Pharmacy: ["dash", "patients", "pharms", "reports", "settings"],
-  Billing: ["dash", "patients", "billing", "reports", "settings"],
+  Lab: ["workspace", "dash", "patients", "labs", "reports", "settings"],
+  Pharmacy: ["workspace", "dash", "patients", "pharms", "reports", "settings"],
+  Billing: ["workspace", "dash", "patients", "billing", "reports", "settings"],
 };
 
 export function navForRole(role: Role): NavItem[] {
