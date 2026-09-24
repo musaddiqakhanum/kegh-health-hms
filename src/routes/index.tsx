@@ -68,6 +68,8 @@ function Dashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Patients registered" value={stats.patients} />
         <Stat label="Visits today" value={stats.visitsToday} />
+        <Stat label="Appointments today" value={stats.appointmentsToday} />
+        <Stat label="Waiting in queue" value={stats.waitingNow} />
         <Stat label="Laboratory today" value={stats.labsToday} />
         <Stat label="Radiology today" value={stats.radsToday} />
         <Stat label="Pharmacy today" value={stats.pharmsToday} />

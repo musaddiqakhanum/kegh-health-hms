@@ -1,9 +1,13 @@
 import {
   EXPENSE_CATEGORIES,
+  type Appointment,
+  type AppointmentStatus,
+  type DoctorSchedule,
   type Expense,
   type HmsState,
   type Patient,
   type PayrollEntry,
+  type Prescription,
   type Staff,
   type Visit,
 } from "./types";
@@ -55,6 +59,14 @@ export function dashboardStats(state: HmsState) {
       .reduce((s, b) => s + Number(b.paid || 0), 0),
     admitted: Object.values(state.visits).filter((v) => v.type === "IPD" && !v.dischargeDate)
       .length,
+    /** Today's diary (cancelled appointments don't count). */
+    appointmentsToday: Object.values(state.appointments ?? {}).filter(
+      (a) => isSameDay(a.date, today) && a.status !== "Cancelled",
+    ).length,
+    /** Patients checked in and waiting in today's OPD token queue. */
+    waitingNow: Object.values(state.appointments ?? {}).filter(
+      (a) => isSameDay(a.date, today) && a.status === "CheckedIn",
+    ).length,
     collectionAll: bills.reduce((s, b) => s + Number(b.paid || 0), 0),
     staffOnRoll: Object.values(state.staff ?? {}).filter((s) => !(s.leaveDate || "").trim()).length,
     salaryThisMonth: Object.values(state.expenses ?? {})
@@ -191,4 +203,197 @@ export function payrollExpenseForPeriod(state: HmsState, period: string): Expens
     .filter((e) => e.payrollPeriod === period)
     .sort((a, b) => b.createdAt - a.createdAt);
   return posted[0];
+}
+
+/* ---------------------------------------------------------- appointments */
+
+/** Statuses where the patient is still expected to be seen. */
+export const OPEN_STATUSES: AppointmentStatus[] = ["Scheduled", "Confirmed", "CheckedIn"];
+
+/** Short weekday names indexed by JS getDay() (0 = Sunday) — roster toggles. */
+export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Appointments on one day, in time order (then booking order). */
+export function appointmentsOn(state: HmsState, date: string): Appointment[] {
+  return Object.values(state.appointments ?? {})
+    .filter((a) => a.date === date)
+    .sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.createdAt - b.createdAt);
+}
+
+/** Open appointments from today onward, soonest first. */
+export function upcomingAppointments(state: HmsState, ref = todayISO()): Appointment[] {
+  return Object.values(state.appointments ?? {})
+    .filter((a) => OPEN_STATUSES.includes(a.status) && (a.date || "") >= ref)
+    .sort(
+      (a, b) =>
+        (a.date || "").localeCompare(b.date || "") ||
+        (a.time || "").localeCompare(b.time || "") ||
+        a.createdAt - b.createdAt,
+    );
+}
+
+/** Next OPD token for a day: one more than the highest token already issued. */
+export function nextTokenNo(state: HmsState, date: string): number {
+  let max = 0;
+  for (const a of Object.values(state.appointments ?? {})) {
+    if (a.date === date && Number(a.tokenNo ?? 0) > max) max = Number(a.tokenNo ?? 0);
+  }
+  return max + 1;
+}
+
+/** Checked-in patients for a day, in token order — the live OPD queue. */
+export function waitingQueue(state: HmsState, date: string): Appointment[] {
+  return appointmentsOn(state, date)
+    .filter((a) => a.status === "CheckedIn")
+    .sort((a, b) => Number(a.tokenNo ?? 0) - Number(b.tokenNo ?? 0));
+}
+
+/** Headline numbers for the token-queue subtitle on one day. */
+export function queueStats(state: HmsState, date: string) {
+  const day = appointmentsOn(state, date);
+  return {
+    waiting: day.filter((a) => a.status === "CheckedIn").length,
+    completed: day.filter((a) => a.status === "Completed").length,
+    /** Tokens issued = appointments that carry a token number. */
+    tokens: day.filter((a) => Number(a.tokenNo ?? 0) > 0).length,
+  };
+}
+
+/* ---------------------------------------------------------------- roster */
+
+/** All roster entries, doctors alphabetically. */
+export function rosterList(state: HmsState): DoctorSchedule[] {
+  return Object.values(state.doctorSchedules ?? {}).sort((a, b) =>
+    (a.doctor || "").localeCompare(b.doctor || ""),
+  );
+}
+
+/** The roster entry covering one doctor, if any. */
+export function rosterFor(state: HmsState, doctor: string): DoctorSchedule | undefined {
+  const d = doctor.trim().toLowerCase();
+  if (!d) return undefined;
+  return rosterList(state).find((s) => (s.doctor || "").trim().toLowerCase() === d);
+}
+
+/** Active roster entries whose weekday covers the given date — who is on duty. */
+export function doctorsOnDuty(state: HmsState, date: string): DoctorSchedule[] {
+  const d = new Date(`${(date || "").slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return [];
+  const day = d.getDay();
+  return rosterList(state).filter((s) => s.active !== false && (s.days ?? []).includes(day));
+}
+
+/* ----------------------------------------------------------- prescriptions */
+
+export function prescriptionsForPatient(state: HmsState, patientId: string): Prescription[] {
+  return sortByDateDesc(
+    Object.values(state.prescriptions ?? {}).filter((p) => p.patientId === patientId),
+  );
+}
+
+/** "Amoxicillin, Paracetamol" or "A, B +2 more". */
+export function prescriptionSummary(rx: Prescription, max = 2): string {
+  const names = (rx.items ?? []).map((i) => (i.medication || "").trim()).filter(Boolean);
+  if (names.length === 0) return "—";
+  const shown = names.slice(0, max).join(", ");
+  return names.length > max ? `${shown} +${names.length - max} more` : shown;
+}
+
+/* --------------------------------------------- appointment / OPD reporting */
+
+export function appointmentsInRange(state: HmsState, range: RangeKey): Appointment[] {
+  return Object.values(state.appointments ?? {}).filter((a) => inRange(a.date, range));
+}
+
+export function prescriptionsInRange(state: HmsState, range: RangeKey): Prescription[] {
+  return Object.values(state.prescriptions ?? {}).filter((p) => inRange(p.date, range));
+}
+
+export interface AppointmentStats {
+  total: number;
+  scheduled: number;
+  confirmed: number;
+  checkedIn: number;
+  completed: number;
+  cancelled: number;
+  noShow: number;
+  /** Still expected to be seen (scheduled + confirmed + checked in). */
+  open: number;
+  /** Appointments that carry a token number. */
+  tokens: number;
+  /** Share of all appointments marked completed, 0–100 %. */
+  completedRate: number;
+  /** Share of all appointments marked no-show, 0–100 %. */
+  noShowRate: number;
+}
+
+export function appointmentStats(rows: Appointment[]): AppointmentStats {
+  const count = (s: AppointmentStatus) => rows.filter((a) => a.status === s).length;
+  const total = rows.length;
+  const completed = count("Completed");
+  const noShow = count("NoShow");
+  return {
+    total,
+    scheduled: count("Scheduled"),
+    confirmed: count("Confirmed"),
+    checkedIn: count("CheckedIn"),
+    completed,
+    cancelled: count("Cancelled"),
+    noShow,
+    open: rows.filter((a) => OPEN_STATUSES.includes(a.status)).length,
+    tokens: rows.filter((a) => Number(a.tokenNo ?? 0) > 0).length,
+    completedRate: total ? Math.round((completed / total) * 100) : 0,
+    noShowRate: total ? Math.round((noShow / total) * 100) : 0,
+  };
+}
+
+export interface DoctorActivityRow extends AppointmentStats {
+  doctor: string;
+  prescriptions: number;
+  medicines: number;
+}
+
+/** Per-doctor OPD activity for a range: appointments, tokens and prescribing. */
+export function doctorActivityRows(state: HmsState, range: RangeKey): DoctorActivityRow[] {
+  const appts = appointmentsInRange(state, range);
+  const rxs = prescriptionsInRange(state, range);
+  const names = new Set<string>();
+  for (const a of appts) {
+    const d = (a.doctor || "").trim();
+    if (d) names.add(d);
+  }
+  for (const r of rxs) {
+    const d = (r.doctor || "").trim();
+    if (d) names.add(d);
+  }
+  return [...names]
+    .map((doctor) => {
+      const myAppts = appts.filter((a) => (a.doctor || "").trim() === doctor);
+      const myRx = rxs.filter((r) => (r.doctor || "").trim() === doctor);
+      return {
+        doctor,
+        ...appointmentStats(myAppts),
+        prescriptions: myRx.length,
+        medicines: myRx.reduce((s, r) => s + (r.items ?? []).length, 0),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.total - a.total || b.prescriptions - a.prescriptions || a.doctor.localeCompare(b.doctor),
+    );
+}
+
+/** Most-prescribed medicines across the given prescriptions, biggest first. */
+export function topMedicines(rows: Prescription[], limit = 8): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const rx of rows) {
+    for (const item of rx.items ?? []) {
+      const name = (item.medication || "").trim();
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit);
 }

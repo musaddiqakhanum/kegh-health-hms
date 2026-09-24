@@ -14,4 +14,11 @@
 - [x] Expenses page (Admin) with salary posted from each payroll run
 - [x] Reports: monthly expense totals incl. salaries, category breakdown
 - [x] Sync every collection (staff, payroll, expenses, appointments…) between devices
+- [x] Appointments restored — day / upcoming / all views, filters, CSV, token check-in
+- [x] Weekly doctor availability roster with on-duty hints in the booking form
+- [x] OPD token queue — now serving, walk-in check-in, token slips, counter board
+- [x] Prescriptions restored — medicine rows, allergy warning, letterhead print, CSV
+- [x] Reports: appointments & prescriptions sections with range, print and CSV
+- [x] Reports: OPD activity & prescribing card with doctor-wise table
+- [x] Dashboard & Patient 360: appointment and prescription tiles, lists and print
 - [x] Live ABHA (ABDM) OTP verification + Ayushman (PM-JAY) card fields on patients
