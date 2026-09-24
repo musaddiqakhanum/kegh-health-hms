@@ -31,6 +31,7 @@ import {
   queueStats,
   sortByDateDesc,
   todayCollection,
+  waitingQueue,
 } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { navForRole } from "./nav";
@@ -45,29 +46,34 @@ function hhmmNow(): string {
 
 /* ------------------------------------------------------------- shared bits */
 
+/** Stat tile that deep-links into the page where the number comes from. */
 function WsStat({
   label,
   value,
   tone,
+  to,
 }: {
   label: string;
   value: string | number;
   tone?: "green" | "amber" | "red" | undefined;
+  to: string;
 }) {
   return (
-    <Card className="p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1.5 text-2xl font-semibold text-foreground",
-          tone === "red" && "text-red-700",
-          tone === "amber" && "text-amber-700",
-          tone === "green" && "text-emerald-700",
-        )}
-      >
-        {value}
-      </p>
-    </Card>
+    <Link to={to} className="block rounded-lg transition-shadow hover:shadow-md">
+      <Card className="h-full p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p
+          className={cn(
+            "mt-1.5 text-2xl font-semibold text-foreground",
+            tone === "red" && "text-red-700",
+            tone === "amber" && "text-amber-700",
+            tone === "green" && "text-emerald-700",
+          )}
+        >
+          {value}
+        </p>
+      </Card>
+    </Link>
   );
 }
 
@@ -158,6 +164,7 @@ export function ReceptionWorkspace() {
   const day = useMemo(() => appointmentsOn(state, today), [state, today]);
   const queue = useMemo(() => queueStats(state, today), [state, today]);
   const due = useMemo(() => dueBills(state), [state]);
+  const serving = useMemo(() => waitingQueue(state, today)[0] ?? null, [state, today]);
   const count = (s: Appointment["status"]) => day.filter((a) => a.status === s).length;
   const arrivals = useMemo(
     () => day.filter((a) => a.status === "Scheduled" || a.status === "Confirmed").slice(0, 6),
@@ -180,14 +187,32 @@ export function ReceptionWorkspace() {
       <WsHeader title="Front desk" person={user?.displayName} extra="Reception workspace" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <WsStat label="Booked today" value={day.length} />
-        <WsStat label="Scheduled" value={count("Scheduled")} />
-        <WsStat label="Confirmed" value={count("Confirmed")} />
-        <WsStat label="Waiting in queue" value={count("CheckedIn")} tone="amber" />
-        <WsStat label="Completed today" value={count("Completed")} tone="green" />
-        <WsStat label="Tokens issued" value={queue.tokens} />
-        <WsStat label="Bills with dues" value={due.length} tone={due.length ? "red" : undefined} />
+        <WsStat to="/appointments" label="Booked today" value={day.length} />
+        <WsStat to="/appointments" label="Scheduled" value={count("Scheduled")} />
+        <WsStat to="/appointments" label="Confirmed" value={count("Confirmed")} />
+        <WsStat to="/queue" label="Waiting in queue" value={count("CheckedIn")} tone="amber" />
         <WsStat
+          to="/appointments"
+          label="Completed today"
+          value={count("Completed")}
+          tone="green"
+        />
+        <WsStat to="/queue" label="Tokens issued" value={queue.tokens} />
+        <WsStat
+          to="/queue"
+          label="Now serving"
+          value={
+            serving ? `#${serving.tokenNo ?? "—"} · ${patientName(state, serving.patientId)}` : "—"
+          }
+        />
+        <WsStat
+          to="/billing"
+          label="Bills with dues"
+          value={due.length}
+          tone={due.length ? "red" : undefined}
+        />
+        <WsStat
+          to="/billing"
           label="Total due"
           value={money(due.reduce((s, d) => s + Number(d.bill.due || 0), 0))}
         />
@@ -296,13 +321,14 @@ export function DoctorWorkspace() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <WsStat
+          to="/queue"
           label="My queue now"
           value={queue.length}
           tone={queue.length ? "amber" : undefined}
         />
-        <WsStat label="My appointments today" value={appts.length} />
-        <WsStat label="My prescriptions today" value={rxToday} />
-        <WsStat label="My recent patients" value={recent.length} />
+        <WsStat to="/appointments" label="My appointments today" value={appts.length} />
+        <WsStat to="/prescriptions" label="My prescriptions today" value={rxToday} />
+        <WsStat to="/visits" label="My recent patients" value={recent.length} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -430,13 +456,15 @@ export function PharmacyWorkspace() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <WsStat
+          to="/prescriptions"
           label="Prescriptions today"
           value={rxToday.length}
           tone={rxToday.length ? "amber" : undefined}
         />
-        <WsStat label="Dispense entries today" value={pharmsToday} />
-        <WsStat label="Dispense entries (all)" value={pharms.length} />
+        <WsStat to="/pharmacy" label="Dispense entries today" value={pharmsToday} />
+        <WsStat to="/pharmacy" label="Dispense entries (all)" value={pharms.length} />
         <WsStat
+          to="/pharmacy"
           label="Dispensed value (all)"
           value={money(pharms.reduce((s, p) => s + Number(p.qty || 0) * Number(p.rate || 0), 0))}
         />
@@ -539,10 +567,19 @@ export function LabWorkspace() {
       <WsHeader title="Laboratory" person={user?.displayName} extra="Lab workspace" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <WsStat label="Lab entries today" value={labsToday} />
-        <WsStat label="Lab entries (all)" value={labs.length} />
-        <WsStat label="Critical flags" value={critical} tone={critical ? "red" : undefined} />
-        <WsStat label="Patients on file" value={Object.keys(state.patients).length} />
+        <WsStat to="/laboratory" label="Lab entries today" value={labsToday} />
+        <WsStat to="/laboratory" label="Lab entries (all)" value={labs.length} />
+        <WsStat
+          to="/laboratory"
+          label="Critical flags"
+          value={critical}
+          tone={critical ? "red" : undefined}
+        />
+        <WsStat
+          to="/patients"
+          label="Patients on file"
+          value={Object.keys(state.patients).length}
+        />
       </div>
 
       <Section
@@ -621,17 +658,19 @@ export function BillingWorkspace() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <WsStat
+          to="/billing"
           label="Unpaid bills"
           value={unpaid.length}
           tone={unpaid.length ? "red" : undefined}
         />
         <WsStat
+          to="/billing"
           label="Partially paid"
           value={partial.length}
           tone={partial.length ? "amber" : undefined}
         />
-        <WsStat label="Total due" value={money(totalDue)} />
-        <WsStat label="Collected today" value={money(collected)} tone="green" />
+        <WsStat to="/billing" label="Total due" value={money(totalDue)} />
+        <WsStat to="/billing" label="Collected today" value={money(collected)} tone="green" />
       </div>
 
       <Section

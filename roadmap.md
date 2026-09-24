@@ -22,3 +22,7 @@
 - [x] Reports: OPD activity & prescribing card with doctor-wise table
 - [x] Dashboard & Patient 360: appointment and prescription tiles, lists and print
 - [x] Live ABHA (ABDM) OTP verification + Ayushman (PM-JAY) card fields on patients
+- [x] Staff login — offline accounts (PBKDF2 hashes), login gate, lockout, login / logout audit entries
+- [x] Per-person role workspaces — Reception, Doctor, Lab, Pharmacy, Billing; Admin keeps the dashboard
+- [ ] Pharmacy inventory — batches, expiry, GRN, reorder levels, low-stock alerts
+- [ ] Audit trail viewer (Admin, read-only) plus CRUD audit writer
