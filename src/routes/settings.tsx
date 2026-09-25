@@ -1,14 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
+import { Download, Plus, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
+import { useSession } from "@/lib/hms/useSession";
 import { packState, unpackState } from "@/lib/hms/pack";
 import { getPassphrase, setPassphrase } from "@/lib/hms/sync";
+import { hashPassword, newSaltHex } from "@/lib/hms/crypto";
+import { activeUsers, findUserByUsername, staffNameFor, userList } from "@/lib/hms/selectors";
 import { downloadBlob } from "@/lib/hms/csv";
 import { abdmStatus } from "@/lib/abdm/abdm.functions";
-import type { Role } from "@/lib/hms/types";
-import { Badge, Button, Card, Field, Input, PageHeader, Select } from "@/components/hms/ui";
+import type { AuditLog, Role, User } from "@/lib/hms/types";
+import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/hms/ui";
+import { AdminOnly } from "@/components/hms/gate";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -31,7 +35,8 @@ export const Route = createFileRoute("/settings")({
 const ROLES: Role[] = ["Admin", "Reception", "Doctor", "Lab", "Pharmacy", "Billing"];
 
 function SettingsPage() {
-  const { settings, updateSettings, state, mergeIn } = useHms();
+  const { settings, updateSettings, state, mergeIn, upsert } = useHms();
+  const { user } = useSession();
   const [pin, setPin] = useState(settings.pin);
   const [pass, setPass] = useState(getPassphrase());
   const [newDoctor, setNewDoctor] = useState("");
@@ -41,6 +46,112 @@ function SettingsPage() {
     environment: string | null;
     demo: boolean;
   } | null>(null);
+
+  /* --------------------------------------------------------- staff users */
+  const users = userList(state);
+  const staffRows = Object.values(state.staff ?? {}).sort((a, b) =>
+    (a.name || "").localeCompare(b.name || ""),
+  );
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [newRole, setNewRole] = useState<Role>("Reception");
+  const [staffPick, setStaffPick] = useState("");
+  const [accountPass, setAccountPass] = useState("");
+  const [accountPass2, setAccountPass2] = useState("");
+  const [resetUser, setResetUser] = useState<User | null>(null);
+  const [resetPass, setResetPass] = useState("");
+  const [resetPass2, setResetPass2] = useState("");
+
+  /** Actor role for audit entries: the signed-in user, else the device role. */
+  const actorRole = user ? user.role : settings.role;
+
+  const writeAudit = (action: "create" | "update", recordId: string) => {
+    upsert<AuditLog>("auditLogs", {
+      id: crypto.randomUUID(),
+      action,
+      collection: "users",
+      recordId,
+      timestamp: Date.now(),
+      deviceName: settings.deviceName,
+      role: actorRole,
+    } as Partial<AuditLog>);
+  };
+
+  const createUser = async () => {
+    const uname = username.trim();
+    const disp = displayName.trim();
+    if (!uname) {
+      toast.error("Enter a username");
+      return;
+    }
+    if (!disp) {
+      toast.error("Enter a display name");
+      return;
+    }
+    if (findUserByUsername(state, uname)) {
+      toast.error("That username is already taken");
+      return;
+    }
+    if (accountPass.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (accountPass !== accountPass2) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    const salt = newSaltHex();
+    const passwordHash = await hashPassword(accountPass, salt);
+    const roleToSave = users.length === 0 ? "Admin" : newRole;
+    const id = upsert<User>("users", {
+      username: uname,
+      displayName: disp,
+      role: roleToSave,
+      staffId: staffPick || undefined,
+      passwordHash,
+      salt,
+      active: true,
+    } as Partial<User>);
+    writeAudit("create", id);
+    toast.success(`Account created for ${disp} (${roleToSave})`);
+    setUsername("");
+    setDisplayName("");
+    setNewRole("Reception");
+    setStaffPick("");
+    setAccountPass("");
+    setAccountPass2("");
+  };
+
+  const toggleActive = (u: User) => {
+    const next = !u.active;
+    if (!next && activeUsers(state).length <= 1) {
+      toast.error("Keep at least one active account, otherwise nobody can sign in");
+      return;
+    }
+    upsert<User>("users", { ...u, active: next } as Partial<User>);
+    writeAudit("update", u.id);
+    toast.success(next ? `${u.displayName} can sign in again` : `${u.displayName} disabled`);
+  };
+
+  const saveReset = async () => {
+    if (!resetUser) return;
+    if (resetPass.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (resetPass !== resetPass2) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    const salt = newSaltHex();
+    const passwordHash = await hashPassword(resetPass, salt);
+    upsert<User>("users", { ...resetUser, salt, passwordHash } as Partial<User>);
+    writeAudit("update", resetUser.id);
+    setResetUser(null);
+    setResetPass("");
+    setResetPass2("");
+    toast.success(`Password reset for ${resetUser.displayName}`);
+  };
 
   useEffect(() => {
     void abdmStatus()
@@ -118,13 +229,20 @@ function SettingsPage() {
           </Field>
           <Field label="Role">
             <Select
-              value={settings.role}
+              value={user ? user.role : settings.role}
+              disabled={Boolean(user)}
               onChange={(e) => updateSettings({ role: e.target.value as Role })}
             >
               {ROLES.map((r) => (
                 <option key={r}>{r}</option>
               ))}
             </Select>
+            {user ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Locked to {user.role} while signed in as {user.displayName}. Sign out — or turn off
+                the login gate — to change the device role.
+              </p>
+            ) : null}
           </Field>
         </div>
       </Card>
@@ -219,6 +337,187 @@ function SettingsPage() {
           </Button>
         </div>
       </Card>
+
+      <AdminOnly
+        page="Users"
+        subtitle="Staff accounts for the device login screen"
+        hint="Accounts sync with the hospital data, so every device with the login gate on can sign in with the same accounts."
+      >
+        <div className="space-y-5">
+          <Card className="space-y-3">
+            <h2 className="font-semibold">Require login on this device</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Login gate">
+                <Select
+                  value={settings.requireLogin ? "on" : "off"}
+                  onChange={(e) => {
+                    const want = e.target.value === "on";
+                    if (want && activeUsers(state).length === 0) {
+                      toast.error("Create the first Admin account below before requiring login");
+                      return;
+                    }
+                    updateSettings({ requireLogin: want });
+                    toast.success(
+                      want ? "Login required on this device" : "Login no longer required",
+                    );
+                  }}
+                >
+                  <option value="on">On</option>
+                  <option value="off">Off</option>
+                </Select>
+              </Field>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When on and at least one active account exists, the app stays behind the sign-in
+              screen until a staff member logs in. With zero accounts the app keeps today's
+              behaviour: the role dropdown plus the optional 4-digit device PIN.
+            </p>
+          </Card>
+
+          <Card className="space-y-4">
+            <h2 className="font-semibold">Accounts</h2>
+            {users.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No staff accounts yet. Create the first one below — it must be an Admin.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border rounded-md ring-1 ring-border/60">
+                {users.map((u) => (
+                  <li key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">{u.displayName}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        @{u.username}
+                        {u.staffId ? ` · ${staffNameFor(state, u.staffId)}` : ""}
+                      </p>
+                    </div>
+                    <Badge tone="neutral">{u.role}</Badge>
+                    <Badge tone={u.active ? "green" : "red"}>
+                      {u.active ? "Active" : "Disabled"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setResetUser(u);
+                        setResetPass("");
+                        setResetPass2("");
+                      }}
+                    >
+                      Reset password
+                    </Button>
+                    <Button variant="outline" onClick={() => toggleActive(u)}>
+                      {u.active ? "Disable" : "Enable"}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-3 text-sm font-semibold">
+                {users.length === 0 ? "Create the first Admin account" : "New account"}
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Username" required>
+                  <Input
+                    placeholder="e.g. drasha"
+                    autoComplete="off"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </Field>
+                <Field label="Display name" required>
+                  <Input
+                    placeholder="e.g. Dr. Aisha Khan"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                  />
+                </Field>
+                <Field label="Role" required>
+                  <Select
+                    value={users.length === 0 ? "Admin" : newRole}
+                    disabled={users.length === 0}
+                    onChange={(e) => setNewRole(e.target.value as Role)}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r}>{r}</option>
+                    ))}
+                  </Select>
+                  {users.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      The first account must be an Admin.
+                    </p>
+                  ) : null}
+                </Field>
+                <Field label="Staff record (optional)">
+                  <Select value={staffPick} onChange={(e) => setStaffPick(e.target.value)}>
+                    <option value="">None</option>
+                    {staffRows.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} · {s.role || "—"}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Password" required>
+                  <Input
+                    type="password"
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                    value={accountPass}
+                    onChange={(e) => setAccountPass(e.target.value)}
+                  />
+                </Field>
+                <Field label="Confirm password" required>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={accountPass2}
+                    onChange={(e) => setAccountPass2(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <div className="mt-4">
+                <Button onClick={() => void createUser()}>
+                  <Plus className="h-4 w-4" /> Create account
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <Modal
+            open={Boolean(resetUser)}
+            title={resetUser ? `Reset password — ${resetUser.displayName}` : "Reset password"}
+            onClose={() => setResetUser(null)}
+          >
+            <div className="grid gap-4">
+              <Field label="New password" required>
+                <Input
+                  type="password"
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  value={resetPass}
+                  onChange={(e) => setResetPass(e.target.value)}
+                />
+              </Field>
+              <Field label="Confirm new password" required>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={resetPass2}
+                  onChange={(e) => setResetPass2(e.target.value)}
+                />
+              </Field>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setResetUser(null)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void saveReset()}>Save new password</Button>
+            </div>
+          </Modal>
+        </div>
+      </AdminOnly>
 
       <Card className="space-y-4">
         <h2 className="font-semibold">Sync &amp; encryption</h2>

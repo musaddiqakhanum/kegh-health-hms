@@ -357,7 +357,7 @@ export interface PayrollEntry {
   createdAt: number;
 }
 
-export type AuditAction = "create" | "update" | "delete";
+export type AuditAction = "create" | "update" | "delete" | "login" | "logout";
 
 /** Lightweight audit trail entry for writes made on any device. */
 export interface AuditLog {
@@ -384,6 +384,7 @@ export type Collection =
   | "expenses"
   | "staff"
   | "payrolls"
+  | "users"
   | "auditLogs";
 
 /** Every synced collection — merge, backup and import all iterate this list. */
@@ -400,6 +401,7 @@ export const COLLECTIONS: Collection[] = [
   "expenses",
   "staff",
   "payrolls",
+  "users",
   "auditLogs",
 ];
 
@@ -416,11 +418,36 @@ export interface HmsState {
   expenses: Record<ID, Expense>;
   staff: Record<ID, Staff>;
   payrolls: Record<ID, PayrollEntry>;
+  users: Record<ID, User>;
   auditLogs: Record<ID, AuditLog>;
   /** operation log: `${collection}:${id}` -> last write timestamp (ms) */
   ops: Record<string, number>;
   /** tombstones for deleted records: `${collection}:${id}` -> deletion timestamp */
   deleted: Record<string, number>;
+}
+
+/**
+ * A staff login account. Passwords are never stored in plaintext — only a
+ * PBKDF2-SHA-256 hash (100,000 iterations) of the password with a per-user
+ * random salt, the same crypto pattern the .keg backup encryption uses.
+ */
+export interface User {
+  id: ID;
+  /** Login name — unique across the list, compared case-insensitively. */
+  username: string;
+  /** Human-readable name shown in the header, sidebar and on printed slips. */
+  displayName: string;
+  /** Workspace + nav this account gets after signing in. */
+  role: Role;
+  /** Optional link to a staff record (payroll / master data). */
+  staffId?: ID | undefined;
+  /** PBKDF2-SHA-256 (100k iterations) digest of the password, hex-encoded. */
+  passwordHash: string;
+  /** Random 16-byte salt for the password hash, hex-encoded. */
+  salt: string;
+  /** Inactive accounts are listed but cannot sign in. */
+  active: boolean;
+  createdAt: number;
 }
 
 export type Role = "Admin" | "Reception" | "Doctor" | "Lab" | "Pharmacy" | "Billing";
@@ -433,6 +460,12 @@ export interface Settings {
   deviceName: string;
   deviceId: string;
   role: Role;
+  /**
+   * When true (and at least one active user exists) the app blocks behind the
+   * login screen until a staff member signs in. With zero users the app keeps
+   * today's behaviour: free role choice plus the optional device PIN.
+   */
+  requireLogin: boolean;
   /** doctors available for selection across the app */
   doctors: string[];
   pin: string;
@@ -458,6 +491,7 @@ export const emptyState = (): HmsState => ({
   expenses: {},
   staff: {},
   payrolls: {},
+  users: {},
   auditLogs: {},
   ops: {},
   deleted: {},
@@ -471,6 +505,7 @@ export const defaultSettings = (): Settings => ({
   deviceName: "This Device",
   deviceId: "",
   role: "Admin",
+  requireLogin: false,
   doctors: [],
   pin: "",
   autoSync: true,
