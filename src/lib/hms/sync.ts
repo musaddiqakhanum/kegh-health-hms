@@ -1,10 +1,14 @@
 import {
   connectDrive,
   downloadFile,
+  DRIVE_FILE_SCOPE,
+  DRIVE_SCOPE,
   ensureFolder,
   getStoredToken,
   listKegFiles,
+  parseFolderId,
   uploadFile,
+  type DriveScope,
 } from "./drive";
 import { mergeStates } from "./merge";
 import { packState, unpackState } from "./pack";
@@ -21,14 +25,31 @@ export function setPassphrase(p: string) {
   else sessionStorage.removeItem(PASS_KEY);
 }
 
+/**
+ * Team mode needs the wider `drive` scope because `drive.file` only exposes the
+ * files created by the account that granted the token — a teammate's account
+ * cannot list or download another account's `.keg` file even when both have
+ * edit access to the same folder.
+ */
+export function driveScopeFor(settings: Pick<Settings, "driveTeamMode">): DriveScope {
+  return settings.driveTeamMode ? DRIVE_SCOPE : DRIVE_FILE_SCOPE;
+}
+
 export interface SyncResult {
   merged: HmsState;
   fileCount: number;
+  folderId: string;
 }
 
 export async function runSync(local: HmsState, settings: Settings): Promise<SyncResult> {
-  const token = getStoredToken()?.accessToken ?? (await connectDrive(settings.driveClientId));
-  const folderId = await ensureFolder(token, settings.driveFolderName);
+  const scope = driveScopeFor(settings);
+  const token =
+    getStoredToken(scope)?.accessToken ?? (await connectDrive(settings.driveClientId, scope));
+
+  // A pinned folder id (Team mode) is used as-is so every staff member syncs
+  // the very same folder; otherwise fall back to "find or create by name".
+  const pinnedFolderId = parseFolderId(settings.driveFolderId);
+  const folderId = pinnedFolderId || (await ensureFolder(token, settings.driveFolderName));
   const files = await listKegFiles(token, folderId);
 
   const passphrase = settings.encryptionEnabled ? getPassphrase() : "";
@@ -52,5 +73,5 @@ export async function runSync(local: HmsState, settings: Settings): Promise<Sync
   const bytes = await packState(merged, passphrase || undefined);
   await uploadFile(token, folderId, myName, bytes, mine?.id);
 
-  return { merged, fileCount: mine ? files.length : files.length + 1 };
+  return { merged, fileCount: mine ? files.length : files.length + 1, folderId };
 }

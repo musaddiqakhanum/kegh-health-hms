@@ -14,6 +14,7 @@
 - [x] Expenses page (Admin) with salary posted from each payroll run
 - [x] Reports: monthly expense totals incl. salaries, category breakdown
 - [x] Sync every collection (staff, payroll, expenses, appointments…) between devices
+- [x] Team sync — several staff Google accounts writing one shared Drive folder
 - [x] Appointments restored — day / upcoming / all views, filters, CSV, token check-in
 - [x] Weekly doctor availability roster with on-duty hints in the booking form
 - [x] OPD token queue — now serving, walk-in check-in, token slips, counter board

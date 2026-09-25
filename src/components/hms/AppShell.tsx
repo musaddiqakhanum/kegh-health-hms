@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
 import { getStoredToken } from "@/lib/hms/drive";
-import { runSync } from "@/lib/hms/sync";
+import { driveScopeFor, runSync } from "@/lib/hms/sync";
 import { activeUsers } from "@/lib/hms/selectors";
 import { navForRole } from "./nav";
 import { registerAppServiceWorker } from "@/lib/hms/register-sw";
@@ -82,7 +82,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || !settings.autoSync || !settings.driveClientId) return;
     const tick = async () => {
-      if (syncing.current || !navigator.onLine || !getStoredToken()) return;
+      if (syncing.current || !navigator.onLine || !getStoredToken(driveScopeFor(settings))) return;
       syncing.current = true;
       try {
         const { merged, fileCount } = await runSync(state, settings);

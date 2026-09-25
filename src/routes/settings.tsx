@@ -562,7 +562,10 @@ function SettingsPage() {
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">
-          Use the same passphrase on every device, otherwise their files cannot be merged.
+          Use the same passphrase on every device, otherwise their files cannot be merged. The{" "}
+          Google Drive account / shared folder is configured on the{" "}
+          <strong>Google Drive Sync</strong> page — including team mode, where every staff member
+          signs in with their own Google account.
         </p>
       </Card>
 

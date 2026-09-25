@@ -474,6 +474,14 @@ export interface Settings {
   encryptionEnabled: boolean;
   driveClientId: string;
   driveFolderName: string;
+  /**
+   * Team mode: several staff members' own Google accounts sync one shared
+   * folder. Requires the full `drive` scope (Google's `drive.file` scope is
+   * per-account), so the folder is pinned by id below.
+   */
+  driveTeamMode: boolean;
+  /** Shared folder link or id (Team mode). Empty = find / create by name. */
+  driveFolderId: string;
   lastSyncAt: number | null;
   lastSyncFileCount: number;
 }
@@ -513,6 +521,8 @@ export const defaultSettings = (): Settings => ({
   encryptionEnabled: false,
   driveClientId: "",
   driveFolderName: "KEGH-HMS Health Records",
+  driveTeamMode: false,
+  driveFolderId: "",
   lastSyncAt: null,
   lastSyncFileCount: 0,
 });
