@@ -5,6 +5,7 @@ import { useHms } from "@/lib/hms/store";
 import { dashboardStats, sortByDateDesc } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money } from "@/lib/hms/format";
 import { getStoredToken } from "@/lib/hms/drive";
+import { driveScopeFor } from "@/lib/hms/sync";
 import { Button, Card, DataTable, PageHeader, Td } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 
@@ -38,7 +39,7 @@ function Dashboard() {
   const checklist = [
     { label: "Hospital details filled in", done: Boolean(settings.hospitalName && settings.hospitalAddress && settings.hospitalPhone) },
     { label: `Role selected (${settings.role})`, done: true },
-    { label: "Google Drive connected", done: Boolean(settings.driveClientId && getStoredToken()) },
+    { label: "Google Drive connected", done: Boolean(settings.driveClientId && getStoredToken(driveScopeFor(settings))) },
     { label: "Encryption passphrase enabled", done: settings.encryptionEnabled },
   ];
 
