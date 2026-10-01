@@ -34,6 +34,7 @@ import {
   waitingQueue,
 } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
+import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
 import type { Appointment } from "@/lib/hms/types";
@@ -450,6 +451,26 @@ export function PharmacyWorkspace() {
   const pharmsToday = pharms.filter((p) => isSameDay(p.date)).length;
   const recentPharms = pharms.slice(0, 6);
 
+  /* Inventory alerts — the pharmacist's reorder and expiry watch-list. */
+  const stockRows = useMemo(() => medStockRows(state), [state]);
+  const outCount = stockRows.filter((r) => r.status === "out").length;
+  const lowCount = stockRows.filter((r) => r.status === "low").length;
+  const expiryWatch = useMemo(
+    () =>
+      Object.values(state.batches ?? {}).filter(
+        (b) => Number(b.qtyOnHand || 0) > 0 && ["expired", "soon"].includes(expiryStatus(b.expiry)),
+      ).length,
+    [state.batches],
+  );
+  const expiryNames = useMemo(
+    () =>
+      stockRows
+        .filter((r) => r.status !== "ok")
+        .slice(0, 4)
+        .map((r) => `${r.med.name} (${r.stock} left)`),
+    [stockRows],
+  );
+
   return (
     <div className="space-y-6">
       <WsHeader title="Dispense" person={user?.displayName} extra="Pharmacy workspace" />
@@ -462,13 +483,38 @@ export function PharmacyWorkspace() {
           tone={rxToday.length ? "amber" : undefined}
         />
         <WsStat to="/pharmacy" label="Dispense entries today" value={pharmsToday} />
-        <WsStat to="/pharmacy" label="Dispense entries (all)" value={pharms.length} />
         <WsStat
           to="/pharmacy"
-          label="Dispensed value (all)"
-          value={money(pharms.reduce((s, p) => s + Number(p.qty || 0) * Number(p.rate || 0), 0))}
+          label="Out of stock"
+          value={outCount}
+          tone={outCount ? "red" : undefined}
+        />
+        <WsStat
+          to="/pharmacy"
+          label="Below reorder level"
+          value={lowCount}
+          tone={lowCount ? "amber" : undefined}
+        />
+        <WsStat
+          to="/pharmacy"
+          label="Expiry watch (≤3 mo)"
+          value={expiryWatch}
+          tone={expiryWatch ? "amber" : undefined}
         />
       </div>
+
+      {outCount + lowCount > 0 ? (
+        <Card className="border-l-4 border-l-amber-500 bg-amber-50/60">
+          <p className="text-sm font-medium text-foreground">Reorder needed</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {expiryNames.join(", ")}
+            {outCount + lowCount > expiryNames.length
+              ? ` +${outCount + lowCount - expiryNames.length} more`
+              : ""}{" "}
+            — open Pharmacy → Inventory for the full list.
+          </p>
+        </Card>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Section
@@ -533,6 +579,12 @@ export function PharmacyWorkspace() {
         title="Quick actions"
         links={[
           {
+            to: "/pharmacy",
+            label: "Inventory & reorder alerts",
+            icon: Pill,
+            hint: "Batches, expiry, GRN",
+          },
+          {
             to: "/prescriptions",
             label: "Prescriptions list",
             icon: ScrollText,
@@ -541,7 +593,7 @@ export function PharmacyWorkspace() {
           {
             to: "/pharmacy",
             label: "Pharmacy dispense log",
-            icon: Pill,
+            icon: ClipboardList,
             hint: "Entry per medication",
           },
         ]}

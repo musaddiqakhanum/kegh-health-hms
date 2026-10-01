@@ -99,6 +99,12 @@ export interface Rad {
   createdAt: number;
 }
 
+/** One batch draw-down a dispense entry applied against stock. */
+export interface StockDraw {
+  batchId: ID;
+  qty: number;
+}
+
 export interface Pharm {
   id: ID;
   patientId: ID;
@@ -110,12 +116,126 @@ export interface Pharm {
   duration: string;
   qty: number;
   rate: number;
+  /** Catalog medicine this entry dispensed, when stock-tracked. */
+  medicineId?: ID | undefined;
+  /** Batch draw-downs applied on save — reversed when the entry is edited / deleted. */
+  stockDraws?: StockDraw[] | undefined;
   /** Units currently in stock for this medication (inventory tracking). */
   stockQty?: number | undefined;
   /** Reorder level — flag low-stock when stockQty <= minStock. */
   minStock?: number | undefined;
   /** Supplier / distributor name for reorders. */
   supplier?: string | undefined;
+  createdAt: number;
+}
+
+/** Quick picks for the dosage-form field on a catalog medicine. */
+export const MED_CATEGORIES: string[] = [
+  "Tablet",
+  "Capsule",
+  "Syrup",
+  "Injection",
+  "Ointment / Cream",
+  "Drops",
+  "Inhaler",
+  "Sachet",
+  "Suppository",
+  "Consumable",
+  "Other",
+];
+
+/** Units stock is counted in — shown across inventory, GRN and dispense. */
+export const MED_UNITS: string[] = [
+  "tablet",
+  "capsule",
+  "strip",
+  "bottle",
+  "vial",
+  "ampoule",
+  "tube",
+  "sachet",
+  "box",
+  "piece",
+];
+
+/** A medicine in the pharmacy catalog — the master record stock is tracked against. */
+export interface Med {
+  id: ID;
+  /** Brand / product name, e.g. "Dolo 650". */
+  name: string;
+  /** Generic / salt name, e.g. "Paracetamol 650 mg". */
+  genericName: string;
+  /** Dosage form, from MED_CATEGORIES or free text. */
+  category: string;
+  /** Unit stock is counted in (tablet, strip, bottle…). */
+  unit: string;
+  /** Reorder level — flag low stock when on-hand stock falls to or below this. */
+  reorderLevel: number;
+  /** Default sale rate per unit (₹), pre-fills the dispense rate. */
+  saleRate: number;
+  /** Preferred supplier / distributor for reorders. */
+  supplier: string;
+  /** HSN / product code for purchase records. */
+  hsn: string;
+  /** Inactive medicines stay on file but are hidden from pickers. */
+  active: boolean;
+  notes: string;
+  createdAt: number;
+}
+
+/** One physical stock batch of a medicine — created by a GRN line (or a manual add), drawn down by dispensing. */
+export interface StockBatch {
+  id: ID;
+  medicineId: ID;
+  batchNo: string;
+  /** Expiry month as YYYY-MM (pack labels give month precision). */
+  expiry: string;
+  qtyOnHand: number;
+  /** Qty originally received incl. free qty — a batch counts as "opened" once qtyOnHand < qtyReceived. */
+  qtyReceived: number;
+  /** Purchase price per unit (₹). */
+  purchaseRate: number;
+  /** MRP per unit (₹). */
+  mrp: number;
+  supplier: string;
+  /** GRN that brought this batch into stock. Empty for manual / opening-stock adds. */
+  grnId?: ID | undefined;
+  /** Adjustment note, e.g. "10 tabs broken in transit". */
+  notes: string;
+  createdAt: number;
+}
+
+/** One line on a Goods Receipt Note. */
+export interface GrnItem {
+  medicineId: ID;
+  /** Snapshot of the medicine name at posting time, so printed GRNs survive catalog edits. */
+  medicineName: string;
+  batchNo: string;
+  /** Expiry month, YYYY-MM. */
+  expiry: string;
+  qty: number;
+  freeQty: number;
+  purchaseRate: number;
+  mrp: number;
+  /** Stock batch this line created, after the GRN is posted. */
+  batchId?: ID | undefined;
+}
+
+/** Goods Receipt Note — a supplier delivery posted into batch stock. */
+export interface Grn {
+  id: ID;
+  /** Running number, shown as GRN-42. */
+  grnNo: number;
+  /** Date the goods were received, YYYY-MM-DD. */
+  date: string;
+  supplier: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  items: GrnItem[];
+  /** Purchase value = Σ qty × purchaseRate (free qty excluded). */
+  total: number;
+  receivedBy: string;
+  notes: string;
   createdAt: number;
 }
 
@@ -377,6 +497,9 @@ export type Collection =
   | "labs"
   | "rads"
   | "pharms"
+  | "meds"
+  | "batches"
+  | "grns"
   | "bills"
   | "appointments"
   | "doctorSchedules"
@@ -394,6 +517,9 @@ export const COLLECTIONS: Collection[] = [
   "labs",
   "rads",
   "pharms",
+  "meds",
+  "batches",
+  "grns",
   "bills",
   "appointments",
   "doctorSchedules",
@@ -411,6 +537,9 @@ export interface HmsState {
   labs: Record<ID, Lab>;
   rads: Record<ID, Rad>;
   pharms: Record<ID, Pharm>;
+  meds: Record<ID, Med>;
+  batches: Record<ID, StockBatch>;
+  grns: Record<ID, Grn>;
   bills: Record<ID, Bill>;
   appointments: Record<ID, Appointment>;
   doctorSchedules: Record<ID, DoctorSchedule>;
@@ -492,6 +621,9 @@ export const emptyState = (): HmsState => ({
   labs: {},
   rads: {},
   pharms: {},
+  meds: {},
+  batches: {},
+  grns: {},
   bills: {},
   appointments: {},
   doctorSchedules: {},

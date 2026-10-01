@@ -25,5 +25,6 @@
 - [x] Live ABHA (ABDM) OTP verification + Ayushman (PM-JAY) card fields on patients
 - [x] Staff login — offline accounts (PBKDF2 hashes), login gate, lockout, login / logout audit entries
 - [x] Per-person role workspaces — Reception, Doctor, Lab, Pharmacy, Billing; Admin keeps the dashboard
-- [ ] Pharmacy inventory — batches, expiry, GRN, reorder levels, low-stock alerts
+- [x] Pharmacy inventory — batches, expiry, GRN, reorder levels, low-stock alerts
+      (catalog + FEFO dispensing, batch write-offs, supplier invoices, stock valuation)
 - [ ] Audit trail viewer (Admin, read-only) plus CRUD audit writer
