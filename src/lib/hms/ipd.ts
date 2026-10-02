@@ -81,3 +81,24 @@ export function bedStats(state: HmsState) {
     pct: total ? Math.round((occupied / total) * 100) : 0,
   };
 }
+
+/** Bed-charge computation for one admission: days stayed × bed rate. */
+export interface BedCharge {
+  days: number;
+  rate: number;
+  amount: number;
+  description: string;
+}
+
+export function bedChargeFor(state: HmsState, admission: Admission): BedCharge | null {
+  const bed = state.beds[admission.bedId];
+  const rate = Number(bed?.rate || 0);
+  if (!bed || rate <= 0) return null;
+  const days = stayDays(admission.admitDate, admission.dischargeDate);
+  return {
+    days,
+    rate,
+    amount: days * rate,
+    description: `Bed charges — ${bed.ward} · ${bed.label} × ${days} day${days === 1 ? "" : "s"}`,
+  };
+}

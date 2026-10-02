@@ -121,5 +121,15 @@ check(
     .join(",") === "a1",
 );
 
+/* bed charges: days stayed × bed rate */
+const charge = ipd.bedChargeFor(state, state.admissions.a1);
+check("bedChargeFor days × rate", charge.days >= 1 && charge.amount === charge.days * 500);
+check(
+  "bedChargeFor names ward and bed",
+  charge.description.includes("General Ward") && charge.description.includes("GW-1"),
+);
+const noRate = { ...state, beds: { ...state.beds, b1: { ...state.beds.b1, rate: 0 } } };
+check("bedChargeFor null without a rate", ipd.bedChargeFor(noRate, noRate.admissions.a1) === null);
+
 console.log(failures === 0 ? "\nAll IPD smoke tests passed." : `\n${failures} test(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
