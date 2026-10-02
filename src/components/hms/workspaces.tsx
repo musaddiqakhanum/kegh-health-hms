@@ -35,6 +35,7 @@ import {
   waitingQueue,
 } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
+import { pendingRx, rxFulfilStats } from "@/lib/hms/fulfil";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
 import { navForRole } from "./nav";
@@ -442,16 +443,13 @@ export function DoctorWorkspace() {
 export function PharmacyWorkspace() {
   const { state } = useHms();
   const { user } = useSession();
-  const rxToday = useMemo(
-    () =>
-      sortByDateDesc(
-        Object.values(state.prescriptions ?? {}).filter((r) => isSameDay(r.date)),
-      ).slice(0, 8),
-    [state.prescriptions],
-  );
   const pharms = useMemo(() => sortByDateDesc(Object.values(state.pharms ?? {})), [state.pharms]);
   const pharmsToday = pharms.filter((p) => isSameDay(p.date)).length;
   const recentPharms = pharms.slice(0, 6);
+
+  /* The counter queue: prescriptions still waiting to be handed over. */
+  const counter = useMemo(() => pendingRx(state).slice(0, 8), [state]);
+  const counterStats = useMemo(() => rxFulfilStats(state), [state]);
 
   /* Inventory alerts — the pharmacist's reorder and expiry watch-list. */
   const stockRows = useMemo(() => medStockRows(state), [state]);
@@ -480,9 +478,9 @@ export function PharmacyWorkspace() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <WsStat
           to="/prescriptions"
-          label="Prescriptions today"
-          value={rxToday.length}
-          tone={rxToday.length ? "amber" : undefined}
+          label="Counter queue"
+          value={counterStats.open}
+          tone={counterStats.open ? "amber" : undefined}
         />
         <WsStat to="/pharmacy" label="Dispense entries today" value={pharmsToday} />
         <WsStat
@@ -520,21 +518,18 @@ export function PharmacyWorkspace() {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Section
-          title="Prescriptions written today"
+          title="Counter queue — prescriptions to dispense"
           badge={
-            <Badge tone={rxToday.length ? "amber" : "neutral"}>{rxToday.length} to review</Badge>
+            <Badge tone={counter.length ? "amber" : "neutral"}>{counterStats.open} open</Badge>
           }
         >
-          <p className="mb-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-            No dispense status exists on prescriptions yet, so every prescription from today is
-            listed here — the honest stand-in for an "awaiting dispense" queue.
-          </p>
-          {rxToday.length === 0 ? (
-            <EmptyRow>No prescriptions written today.</EmptyRow>
+          {counter.length === 0 ? (
+            <EmptyRow>Counter clear — every prescription is fully dispensed.</EmptyRow>
           ) : (
             <ul className="space-y-1 text-sm">
-              {rxToday.map((r) => (
+              {counter.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground">{fmtDate(r.date)}</span>
                   <Link
                     to="/patients/$patientId"
                     params={{ patientId: r.patientId }}
@@ -542,8 +537,13 @@ export function PharmacyWorkspace() {
                   >
                     {patientName(state, r.patientId)}
                   </Link>
-                  <span className="text-muted-foreground">{r.doctor || "—"}</span>
                   <span className="text-muted-foreground">{prescriptionSummary(r)}</span>
+                  <Badge tone={r.dispenseStatus === "Partial" ? "amber" : "red"}>
+                    {r.dispenseStatus ?? "Pending"}
+                  </Badge>
+                  <Link to="/prescriptions" className="ml-auto font-medium text-accent underline">
+                    Dispense →
+                  </Link>
                 </li>
               ))}
             </ul>

@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Download, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
+import { CheckCheck, Download, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
+import { useSession } from "@/lib/hms/useSession";
 import {
   RANGE_LABELS,
   prescriptionSummary,
@@ -10,10 +11,13 @@ import {
   sortByDateDesc,
   type RangeKey,
 } from "@/lib/hms/selectors";
-import { ageFromDob, fmtDate, todayISO } from "@/lib/hms/format";
+import { ageFromDob, fmtDate, fmtDateTime, todayISO } from "@/lib/hms/format";
+import { fulfilStatus, itemFlags, matchMedicine } from "@/lib/hms/fulfil";
+import { currentMonth, expiryStatus, sellableStock, suggestedRate } from "@/lib/hms/inventory";
 import { downloadCsv } from "@/lib/hms/csv";
-import type { Prescription, PrescriptionItem } from "@/lib/hms/types";
+import type { Pharm, Prescription, PrescriptionItem, StockBatch, StockDraw } from "@/lib/hms/types";
 import {
+  Badge,
   Button,
   Card,
   DataTable,
@@ -83,7 +87,9 @@ function PrescriptionsPage() {
   const [form, setForm] = useState<Partial<Prescription>>(blank);
   const [error, setError] = useState("");
   const [printRx, setPrintRx] = useState<Prescription | null>(null);
+  const [dispenseRx, setDispenseRx] = useState<Prescription | null>(null);
   const [range, setRange] = useState<RangeKey>("all");
+  const [fulfil, setFulfil] = useState<"" | "open" | "dispensed">("");
   const [q, setQ] = useState("");
 
   const total = Object.keys(state.prescriptions ?? {}).length;
@@ -103,6 +109,15 @@ function PrescriptionsPage() {
         );
     return sortByDateDesc(filtered);
   }, [state, range, q]);
+
+  /* Fulfilment filter: open = Pending or Partially handed over. */
+  const visible = useMemo(() => {
+    if (fulfil === "open")
+      return rows.filter((r) => (r.dispenseStatus ?? "Pending") !== "Dispensed");
+    if (fulfil === "dispensed")
+      return rows.filter((r) => (r.dispenseStatus ?? "Pending") === "Dispensed");
+    return rows;
+  }, [rows, fulfil]);
 
   const items = form.items ?? [];
   const allergyPatient = form.patientId ? state.patients[form.patientId] : undefined;
@@ -155,6 +170,7 @@ function PrescriptionsPage() {
         "Frequency",
         "Duration",
         "Advice",
+        "Fulfilment",
       ],
     ];
     for (const r of rows) {
@@ -171,6 +187,7 @@ function PrescriptionsPage() {
           item.frequency,
           item.duration,
           r.notes ?? "",
+          r.dispenseStatus ?? "Pending",
         ]);
       }
     }
@@ -202,7 +219,7 @@ function PrescriptionsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Field label="Search">
           <Input
             placeholder="Patient, doctor, diagnosis or medicine…"
@@ -219,14 +236,21 @@ function PrescriptionsPage() {
             ))}
           </Select>
         </Field>
+        <Field label="Fulfilment">
+          <Select value={fulfil} onChange={(e) => setFulfil(e.target.value as typeof fulfil)}>
+            <option value="">All</option>
+            <option value="open">Awaiting pharmacy</option>
+            <option value="dispensed">Dispensed</option>
+          </Select>
+        </Field>
       </div>
 
       <DataTable
-        columns={["Date", "Patient", "Doctor", "Diagnosis", "Medicines", ""]}
-        rowCount={rows.length}
+        columns={["Date", "Patient", "Doctor", "Diagnosis", "Medicines", "Fulfilment", ""]}
+        rowCount={visible.length}
         empty="No prescriptions in this range."
       >
-        {rows.map((r) => (
+        {visible.map((r) => (
           <tr key={r.id}>
             <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
             <Td>
@@ -241,6 +265,34 @@ function PrescriptionsPage() {
             <Td>{r.doctor || "—"}</Td>
             <Td>{r.diagnosis || "—"}</Td>
             <Td>{prescriptionSummary(r)}</Td>
+            <Td className="whitespace-nowrap">
+              {(() => {
+                const st = r.dispenseStatus ?? "Pending";
+                return (
+                  <div className="flex flex-col items-start gap-1">
+                    <Badge tone={st === "Dispensed" ? "green" : st === "Partial" ? "amber" : "red"}>
+                      {st === "Dispensed" ? "Dispensed" : st === "Partial" ? "Partial" : "Pending"}
+                    </Badge>
+                    {st !== "Dispensed" ? (
+                      <Button
+                        variant="outline"
+                        className="px-2 py-1 text-xs"
+                        onClick={() => setDispenseRx(r)}
+                      >
+                        <CheckCheck className="h-3.5 w-3.5" /> Dispense
+                      </Button>
+                    ) : (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        title={fmtDateTime(r.dispensedAt)}
+                      >
+                        {r.dispensedBy}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </Td>
             <Td className="whitespace-nowrap">
               <div className="flex items-center gap-1">
                 <button
@@ -487,6 +539,8 @@ function PrescriptionsPage() {
         ) : null}
       </PrintOverlay>
 
+      <DispenseModal rx={dispenseRx} onClose={() => setDispenseRx(null)} />
+
       <datalist id="rx-frequency">
         {FREQUENCY_SUGGESTIONS.map((f) => (
           <option key={f} value={f} />
@@ -498,5 +552,215 @@ function PrescriptionsPage() {
         ))}
       </datalist>
     </div>
+  );
+}
+
+/* ------------------------------------------------------- dispense modal */
+
+interface DispenseLine {
+  include: boolean;
+  qty: number;
+  rate: number;
+}
+
+/**
+ * The pharmacy counter: tick the medicines being handed over with qty and
+ * rate. Catalog medicines draw stock down FEFO-style; each line becomes a
+ * Pharmacy dispense entry; the prescription flips to Partial / Dispensed.
+ */
+function DispenseModal({ rx, onClose }: { rx: Prescription | null; onClose: () => void }) {
+  const { state, upsert } = useHms();
+  const { user } = useSession();
+  const [lines, setLines] = useState<DispenseLine[]>([]);
+  const [seeded, setSeeded] = useState<string | null>(null);
+
+  /* Re-seed the lines each time a different prescription opens. */
+  if (rx && rx.id !== seeded) {
+    setSeeded(rx.id);
+    setLines(
+      (rx.items ?? []).map((it, i) => {
+        const med = matchMedicine(state, it.medication);
+        return {
+          include: rx.itemDispensed?.[i] !== true,
+          qty: 1,
+          rate: med ? suggestedRate(state, med) : 0,
+        };
+      }),
+    );
+  }
+  if (!rx) return null;
+
+  const items = rx.items ?? [];
+  const setLine = (i: number, patch: Partial<DispenseLine>) =>
+    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+
+  const total = lines.reduce((s, l) => (l.include ? s + l.qty * l.rate : s), 0);
+
+  const save = () => {
+    const chosen = items
+      .map((it, i) => ({ it, i, line: lines[i] }))
+      .filter(
+        (x): x is { it: PrescriptionItem; i: number; line: DispenseLine } =>
+          x.line?.include === true && rx.itemDispensed?.[x.i] !== true,
+      );
+    if (chosen.length === 0) {
+      toast.error("Nothing selected to dispense");
+      return;
+    }
+
+    /* Plan every stock draw in memory first; bail out without writing if any
+       line can't be covered (expired batches never count). */
+    const working = new Map<string, StockBatch>();
+    const ref = currentMonth();
+    const plans: { i: number; med: ReturnType<typeof matchMedicine>; draws: StockDraw[] }[] = [];
+    for (const { it, i, line } of chosen) {
+      const qty = Number(line.qty || 0);
+      if (qty <= 0) {
+        toast.error(`Quantity for ${it.medication} must be above zero`);
+        return;
+      }
+      const med = matchMedicine(state, it.medication);
+      let draws: StockDraw[] = [];
+      if (med) {
+        const sellable = Object.values(state.batches ?? {})
+          .filter((b) => b.medicineId === med.id)
+          .map((b) => working.get(b.id) ?? b)
+          .filter((b) => Number(b.qtyOnHand || 0) > 0 && expiryStatus(b.expiry, ref) !== "expired")
+          .sort(
+            (a, b) => (a.expiry || "").localeCompare(b.expiry || "") || a.createdAt - b.createdAt,
+          );
+        let remaining = qty;
+        const ds: StockDraw[] = [];
+        for (const b of sellable) {
+          if (remaining <= 0) break;
+          const use = Math.min(Number(b.qtyOnHand || 0), remaining);
+          if (use > 0) {
+            ds.push({ batchId: b.id, qty: use });
+            working.set(b.id, { ...b, qtyOnHand: Number(b.qtyOnHand || 0) - use });
+            remaining -= use;
+          }
+        }
+        if (remaining > 0) {
+          toast.error(
+            `Not enough stock for ${it.medication} — ${qty - remaining} sellable, ${qty} needed`,
+          );
+          return;
+        }
+        draws = ds;
+      }
+      plans.push({ i, med, draws });
+    }
+
+    for (const { i, med, draws } of plans) {
+      const it = items[i]!;
+      const line = lines[i]!;
+      upsert<Pharm>("pharms", {
+        patientId: rx.patientId,
+        visitId: rx.visitId || "",
+        date: todayISO(),
+        medication: it.medication,
+        dosage: it.dosage ?? "",
+        frequency: it.frequency ?? "",
+        duration: it.duration ?? "",
+        qty: Number(line.qty || 0),
+        rate: Number(line.rate || 0),
+        medicineId: med?.id,
+        stockDraws: draws.length > 0 ? draws : undefined,
+      } as Pharm);
+    }
+    for (const b of working.values()) upsert<StockBatch>("batches", b);
+
+    const flags = itemFlags(rx);
+    for (const p of plans) flags[p.i] = true;
+    upsert<Prescription>("prescriptions", {
+      id: rx.id,
+      itemDispensed: flags,
+      dispenseStatus: fulfilStatus(flags, items.length),
+      dispensedBy: user?.displayName ?? "Pharmacy",
+      dispensedAt: Date.now(),
+    });
+    toast.success(`Dispensed ${plans.length} item${plans.length === 1 ? "" : "s"} — stock updated`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open
+      title={`Dispense — ${state.patients[rx.patientId]?.name ?? "patient"}`}
+      onClose={onClose}
+      wide
+    >
+      <p className="mb-3 text-sm text-muted-foreground">
+        {fmtDate(rx.date)} · {rx.doctor || "—"} · unticked lines stay on the counter queue.
+      </p>
+      <div className="space-y-2">
+        {items.map((it, i) => {
+          const already = rx.itemDispensed?.[i] === true;
+          const med = matchMedicine(state, it.medication);
+          const stock = med ? sellableStock(state, med.id) : null;
+          const line = lines[i] ?? { include: false, qty: 1, rate: 0 };
+          return (
+            <div
+              key={i}
+              className={`flex flex-wrap items-center gap-2 rounded-lg border border-border/70 p-2.5 ${already ? "opacity-50" : ""}`}
+            >
+              <input
+                type="checkbox"
+                className="ml-1 h-4 w-4"
+                disabled={already}
+                checked={already || line.include}
+                onChange={(e) => setLine(i, { include: e.target.checked })}
+              />
+              <div className="min-w-40 flex-1">
+                <p className="text-sm font-medium text-foreground">{it.medication}</p>
+                <p className="text-xs text-muted-foreground">
+                  {[it.dosage, it.frequency, it.duration].filter(Boolean).join(" · ") || "—"}
+                  {already ? " · already dispensed" : ""}
+                  {!already && med ? ` · ${stock} in stock` : ""}
+                  {!already && !med ? " · not in catalog (no stock tracking)" : ""}
+                </p>
+              </div>
+              {!already && med !== undefined && (stock ?? 0) < line.qty ? (
+                <Badge tone="red">short</Badge>
+              ) : null}
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                Qty
+                <Input
+                  type="number"
+                  min={0}
+                  className="w-20 px-2 py-1"
+                  disabled={already}
+                  value={line.qty}
+                  onChange={(e) => setLine(i, { qty: Number(e.target.value) })}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                ₹
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="w-24 px-2 py-1"
+                  disabled={already}
+                  value={line.rate}
+                  onChange={(e) => setLine(i, { rate: Number(e.target.value) })}
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 rounded-md bg-muted px-3 py-2 text-sm">
+        Selected total: <strong>₹{total.toFixed(2)}</strong>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={save}>
+          <CheckCheck className="h-4 w-4" /> Dispense selected
+        </Button>
+      </div>
+    </Modal>
   );
 }
