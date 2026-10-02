@@ -109,6 +109,50 @@ export interface Admission {
   createdAt: number;
 }
 
+/** Quick picks for the category of a shift handover note. */
+export const HANDOVER_CATEGORIES: string[] = [
+  "Handover",
+  "Patient follow-up",
+  "Urgent",
+  "Billing",
+  "Pharmacy",
+  "Lab / sample",
+  "Housekeeping",
+  "Other",
+];
+
+/**
+ * A note one shift leaves for the next — written text, optionally a photo
+ * (downscaled snapshot) and/or a short voice recording (compressed audio).
+ * Attachments are data URIs inside the record, so they travel with the
+ * normal Drive sync like every other collection.
+ */
+export interface HandoverNote {
+  id: ID;
+  /** Date the note was written, YYYY-MM-DD. */
+  date: string;
+  /** Clock time, HH:MM. */
+  time: string;
+  /** Who wrote it — session display name or device name. */
+  author: string;
+  /** Their role (Reception / Doctor / Nursing staff…). */
+  role: string;
+  category: string;
+  /** Optional link when the note is about one patient. */
+  patientId?: ID | undefined;
+  text: string;
+  /** Next shift marks the note handled. */
+  resolved: boolean;
+  resolvedBy?: string | undefined;
+  resolvedAt?: number | undefined;
+  /** Downscaled JPEG snapshot as a data URI. */
+  photoData?: string | undefined;
+  /** Voice note as a data URI (webm/opus from the browser recorder). */
+  audioData?: string | undefined;
+  audioMime?: string | undefined;
+  createdAt: number;
+}
+
 export interface Visit {
   id: ID;
   patientId: ID;
@@ -631,6 +675,7 @@ export type Collection =
   | "appointments"
   | "doctorSchedules"
   | "prescriptions"
+  | "handoverNotes"
   | "expenses"
   | "staff"
   | "payrolls"
@@ -654,6 +699,7 @@ export const COLLECTIONS: Collection[] = [
   "appointments",
   "doctorSchedules",
   "prescriptions",
+  "handoverNotes",
   "expenses",
   "staff",
   "payrolls",
@@ -677,6 +723,7 @@ export interface HmsState {
   appointments: Record<ID, Appointment>;
   doctorSchedules: Record<ID, DoctorSchedule>;
   prescriptions: Record<ID, Prescription>;
+  handoverNotes: Record<ID, HandoverNote>;
   expenses: Record<ID, Expense>;
   staff: Record<ID, Staff>;
   payrolls: Record<ID, PayrollEntry>;
@@ -764,6 +811,7 @@ export const emptyState = (): HmsState => ({
   appointments: {},
   doctorSchedules: {},
   prescriptions: {},
+  handoverNotes: {},
   expenses: {},
   staff: {},
   payrolls: {},

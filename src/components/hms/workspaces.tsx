@@ -6,6 +6,7 @@ import {
   FlaskConical,
   IndianRupee,
   ListOrdered,
+  NotebookPen,
   Pill,
   Receipt,
   Scan,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { pendingRx, rxFulfilStats } from "@/lib/hms/fulfil";
+import { handoverStats } from "@/lib/hms/handover";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { bedStats } from "@/lib/hms/ipd";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
@@ -170,6 +172,7 @@ export function ReceptionWorkspace() {
   const day = useMemo(() => appointmentsOn(state, today), [state, today]);
   const queue = useMemo(() => queueStats(state, today), [state, today]);
   const bedsOccupied = useMemo(() => bedStats(state), [state]);
+  const handoverCounts = useMemo(() => handoverStats(state), [state]);
   const due = useMemo(() => dueBills(state), [state]);
   const serving = useMemo(() => waitingQueue(state, today)[0] ?? null, [state, today]);
   const count = (s: Appointment["status"]) => day.filter((a) => a.status === s).length;
@@ -203,6 +206,12 @@ export function ReceptionWorkspace() {
           label="Beds occupied"
           value={bedsOccupied.total ? `${bedsOccupied.occupied}/${bedsOccupied.total}` : "—"}
           tone={bedsOccupied.pct >= 90 ? "red" : undefined}
+        />
+        <WsStat
+          to="/handover"
+          label="Handover notes"
+          value={handoverCounts.open}
+          tone={handoverCounts.open ? "amber" : undefined}
         />
         <WsStat
           to="/appointments"
@@ -300,6 +309,12 @@ export function ReceptionWorkspace() {
               label: "IPD bed board",
               icon: BedDouble,
               hint: "Admissions and beds",
+            },
+            {
+              to: "/handover",
+              label: "Shift handover",
+              icon: NotebookPen,
+              hint: "Notes for relief staff",
             },
           ]}
         />
@@ -447,6 +462,7 @@ export function DoctorWorkspace() {
           },
           { to: "/lab-orders", label: "Order lab tests", icon: TestTube2, hint: "With priority" },
           { to: "/ipd", label: "IPD & admissions", icon: BedDouble, hint: "Admit a patient" },
+          { to: "/handover", label: "Shift handover", icon: NotebookPen, hint: "Notes for relief" },
           { to: "/radiology", label: "Radiology", icon: Scan, hint: "Studies and impressions" },
         ]}
       />

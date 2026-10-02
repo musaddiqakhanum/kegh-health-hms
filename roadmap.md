@@ -36,3 +36,5 @@
       FEFO; Pharmacy workspace counter queue (last stand-in removed)
 - [x] IPD admissions & beds — wards/bed master with batch add, bed board with
       live occupancy, admit → discharge flow, letterhead discharge summaries
+- [x] Shift handover — written notes, photo snapshots and voice recordings
+      from any duty role; open/handled tracking; attachments sync with Drive

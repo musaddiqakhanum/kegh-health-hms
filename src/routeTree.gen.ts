@@ -14,6 +14,7 @@ import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as ExpensesRouteImport } from './routes/expenses'
+import { Route as HandoverRouteImport } from './routes/handover'
 import { Route as IpdRouteImport } from './routes/ipd'
 import { Route as LabOrdersRouteImport } from './routes/lab-orders'
 import { Route as LaboratoryRouteImport } from './routes/laboratory'
@@ -54,6 +55,11 @@ const BillingRoute = BillingRouteImport.update({
 const ExpensesRoute = ExpensesRouteImport.update({
   id: '/expenses',
   path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HandoverRoute = HandoverRouteImport.update({
+  id: '/handover',
+  path: '/handover',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IpdRoute = IpdRouteImport.update({
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
+  '/handover': typeof HandoverRoute
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
+  '/handover': typeof HandoverRoute
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
@@ -190,6 +198,7 @@ export interface FileRoutesById {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
+  '/handover': typeof HandoverRoute
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
@@ -215,6 +224,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/expenses'
+    | '/handover'
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/expenses'
+    | '/handover'
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/expenses'
+    | '/handover'
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
@@ -285,6 +297,7 @@ export interface RootRouteChildren {
   AuditRoute: typeof AuditRoute
   BillingRoute: typeof BillingRoute
   ExpensesRoute: typeof ExpensesRoute
+  HandoverRoute: typeof HandoverRoute
   IpdRoute: typeof IpdRoute
   LabOrdersRoute: typeof LabOrdersRoute
   LaboratoryRoute: typeof LaboratoryRoute
@@ -338,6 +351,13 @@ declare module '@tanstack/react-router' {
       path: '/expenses'
       fullPath: '/expenses'
       preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/handover': {
+      id: '/handover'
+      path: '/handover'
+      fullPath: '/handover'
+      preLoaderRoute: typeof HandoverRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ipd': {
@@ -461,6 +481,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuditRoute: AuditRoute,
   BillingRoute: BillingRoute,
   ExpensesRoute: ExpensesRoute,
+  HandoverRoute: HandoverRoute,
   IpdRoute: IpdRoute,
   LabOrdersRoute: LabOrdersRoute,
   LaboratoryRoute: LaboratoryRoute,
