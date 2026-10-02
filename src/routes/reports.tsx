@@ -28,9 +28,15 @@ export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
       { title: "Reports — KEGH HMS" },
-      { name: "description", content: "Section-wise and patient-wise hospital reports with print and CSV export." },
+      {
+        name: "description",
+        content: "Section-wise and patient-wise hospital reports with print and CSV export.",
+      },
       { property: "og:title", content: "Reports — KEGH HMS" },
-      { property: "og:description", content: "Section-wise and patient-wise hospital reports with print and CSV export." },
+      {
+        property: "og:description",
+        content: "Section-wise and patient-wise hospital reports with print and CSV export.",
+      },
     ],
   }),
   component: ReportsPage,
@@ -79,7 +85,13 @@ function ReportsPage() {
       const r = rows as unknown as (typeof state.labs)[string][];
       return {
         head: ["Date", "Patient", "Test", "Result", "Flag"],
-        body: r.map((x) => [fmtDate(x.date), name(x.patientId), x.testName, `${x.result} ${x.unit}`, x.flag]),
+        body: r.map((x) => [
+          fmtDate(x.date),
+          name(x.patientId),
+          x.testName,
+          `${x.result} ${x.unit}`,
+          x.flag,
+        ]),
         summary: [
           ["Total tests", String(r.length)],
           ["Normal", String(r.filter((x) => x.flag === "normal").length)],
@@ -92,7 +104,13 @@ function ReportsPage() {
       const r = rows as unknown as (typeof state.rads)[string][];
       return {
         head: ["Date", "Patient", "Study", "Impression", "Radiologist"],
-        body: r.map((x) => [fmtDate(x.date), name(x.patientId), x.studyType, x.impression, x.radiologist]),
+        body: r.map((x) => [
+          fmtDate(x.date),
+          name(x.patientId),
+          x.studyType,
+          x.impression,
+          x.radiologist,
+        ]),
         summary: [["Total studies", String(r.length)]],
       };
     }
@@ -101,7 +119,13 @@ function ReportsPage() {
       const value = r.reduce((s, x) => s + Number(x.qty || 0) * Number(x.rate || 0), 0);
       return {
         head: ["Date", "Patient", "Medication", "Qty", "Amount"],
-        body: r.map((x) => [fmtDate(x.date), name(x.patientId), x.medication, String(x.qty), money(x.qty * x.rate)]),
+        body: r.map((x) => [
+          fmtDate(x.date),
+          name(x.patientId),
+          x.medication,
+          String(x.qty),
+          money(x.qty * x.rate),
+        ]),
         summary: [
           ["Total entries", String(r.length)],
           ["Items dispensed", String(r.reduce((s, x) => s + Number(x.qty || 0), 0))],
@@ -163,7 +187,14 @@ function ReportsPage() {
     const modes = ["Cash", "UPI", "Card", "Insurance"];
     return {
       head: ["Date", "Patient", "Total", "Paid", "Due", "Mode"],
-      body: r.map((x) => [fmtDate(x.date), name(x.patientId), money(x.totalAmount), money(x.paid), money(x.due), x.paymentMode]),
+      body: r.map((x) => [
+        fmtDate(x.date),
+        name(x.patientId),
+        money(x.totalAmount),
+        money(x.paid),
+        money(x.due),
+        x.paymentMode,
+      ]),
       summary: [
         ["Bills", String(r.length)],
         ["Billed", money(r.reduce((s, x) => s + Number(x.totalAmount || 0), 0))],
@@ -225,9 +256,15 @@ function ReportsPage() {
         prescriptionSummary(r, 99),
       ]),
     );
-    pData.labs.forEach((l) => out.push(["Lab", l.date, l.testName, `${l.result} ${l.unit}`, l.flag]));
-    pData.rads.forEach((r) => out.push(["Radiology", r.date, r.studyType, r.impression, r.radiologist]));
-    pData.pharms.forEach((p) => out.push(["Pharmacy", p.date, p.medication, p.qty, p.qty * p.rate]));
+    pData.labs.forEach((l) =>
+      out.push(["Lab", l.date, l.testName, `${l.result} ${l.unit}`, l.flag]),
+    );
+    pData.rads.forEach((r) =>
+      out.push(["Radiology", r.date, r.studyType, r.impression, r.radiologist]),
+    );
+    pData.pharms.forEach((p) =>
+      out.push(["Pharmacy", p.date, p.medication, p.qty, p.qty * p.rate]),
+    );
     pData.bills.forEach((b) => out.push(["Bill", b.date, b.totalAmount, b.paid, b.due]));
     downloadCsv(`${patient.mrn.replace(/\//g, "-")}-report.csv`, out);
   };
@@ -408,20 +445,28 @@ function ReportsPage() {
           <Field label="Section">
             <Select value={section} onChange={(e) => setSection(e.target.value as Section)}>
               {Object.entries(SECTION_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+                <option key={k} value={k}>
+                  {v}
+                </option>
               ))}
             </Select>
           </Field>
           <Field label="Date range">
             <Select value={range} onChange={(e) => setRange(e.target.value as RangeKey)}>
               {Object.entries(RANGE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+                <option key={k} value={k}>
+                  {v}
+                </option>
               ))}
             </Select>
           </Field>
           <div className="flex items-end gap-2">
-            <Button onClick={() => setPrintKind("section")}><Printer className="h-4 w-4" /> Print</Button>
-            <Button variant="outline" onClick={exportSectionCsv}><Download className="h-4 w-4" /> CSV</Button>
+            <Button onClick={() => setPrintKind("section")}>
+              <Printer className="h-4 w-4" /> Print
+            </Button>
+            <Button variant="outline" onClick={exportSectionCsv}>
+              <Download className="h-4 w-4" /> CSV
+            </Button>
           </div>
         </div>
 
@@ -437,16 +482,30 @@ function ReportsPage() {
         <div className="mt-4 max-h-80 overflow-auto rounded-md ring-1 ring-border/60">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="sticky top-0 bg-secondary">
-              <tr>{sectionTable.head.map((h) => <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">{h}</th>)}</tr>
+              <tr>
+                {sectionTable.head.map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                    {h}
+                  </th>
+                ))}
+              </tr>
             </thead>
             <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
               {sectionTable.body.map((r, i) => (
-                <tr key={i}>{r.map((c, j) => <td key={j} className="px-3 py-2">{c}</td>)}</tr>
+                <tr key={i}>
+                  {r.map((c, j) => (
+                    <td key={j} className="px-3 py-2">
+                      {c}
+                    </td>
+                  ))}
+                </tr>
               ))}
             </tbody>
           </table>
           {sectionTable.body.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">No records in this range.</p>
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No records in this range.
+            </p>
           ) : null}
         </div>
       </Card>
@@ -561,8 +620,12 @@ function ReportsPage() {
             <PatientPicker value={patientId} onChange={setPatientId} />
           </Field>
           <div className="flex items-end gap-2">
-            <Button disabled={!patientId} onClick={() => setPrintKind("patient")}><Printer className="h-4 w-4" /> Print</Button>
-            <Button variant="outline" disabled={!patientId} onClick={exportPatientCsv}><Download className="h-4 w-4" /> CSV</Button>
+            <Button disabled={!patientId} onClick={() => setPrintKind("patient")}>
+              <Printer className="h-4 w-4" /> Print
+            </Button>
+            <Button variant="outline" disabled={!patientId} onClick={exportPatientCsv}>
+              <Download className="h-4 w-4" /> CSV
+            </Button>
           </div>
         </div>
         {pData && patient ? (
@@ -593,15 +656,28 @@ function ReportsPage() {
         <table className="mb-4">
           <tbody>
             {sectionTable.summary.map(([k, v]) => (
-              <tr key={k}><th>{k}</th><td>{v}</td></tr>
+              <tr key={k}>
+                <th>{k}</th>
+                <td>{v}</td>
+              </tr>
             ))}
           </tbody>
         </table>
         <table>
-          <thead><tr>{sectionTable.head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+          <thead>
+            <tr>
+              {sectionTable.head.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {sectionTable.body.map((r, i) => (
-              <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>
+              <tr key={i}>
+                {r.map((c, j) => (
+                  <td key={j}>{c}</td>
+                ))}
+              </tr>
             ))}
           </tbody>
         </table>
@@ -686,8 +762,24 @@ function ReportsPage() {
           <>
             <h3 className="mb-1 font-semibold">Visits</h3>
             <table className="mb-4">
-              <thead><tr><th>Date</th><th>Type</th><th>Doctor</th><th>Diagnosis</th></tr></thead>
-              <tbody>{pData.visits.map((v) => <tr key={v.id}><td>{fmtDate(v.date)}</td><td>{v.type}</td><td>{v.doctor}</td><td>{v.diagnosis}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Doctor</th>
+                  <th>Diagnosis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.visits.map((v) => (
+                  <tr key={v.id}>
+                    <td>{fmtDate(v.date)}</td>
+                    <td>{v.type}</td>
+                    <td>{v.doctor}</td>
+                    <td>{v.diagnosis}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
             <h3 className="mb-1 font-semibold">Appointments</h3>
             <table className="mb-4">
@@ -745,23 +837,87 @@ function ReportsPage() {
             </table>
             <h3 className="mb-1 font-semibold">Laboratory</h3>
             <table className="mb-4">
-              <thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Flag</th></tr></thead>
-              <tbody>{pData.labs.map((l) => <tr key={l.id}><td>{fmtDate(l.date)}</td><td>{l.testName}</td><td>{l.result} {l.unit}</td><td>{l.flag}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Test</th>
+                  <th>Result</th>
+                  <th>Flag</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.labs.map((l) => (
+                  <tr key={l.id}>
+                    <td>{fmtDate(l.date)}</td>
+                    <td>{l.testName}</td>
+                    <td>
+                      {l.result} {l.unit}
+                    </td>
+                    <td>{l.flag}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
             <h3 className="mb-1 font-semibold">Radiology</h3>
             <table className="mb-4">
-              <thead><tr><th>Date</th><th>Study</th><th>Impression</th></tr></thead>
-              <tbody>{pData.rads.map((r) => <tr key={r.id}><td>{fmtDate(r.date)}</td><td>{r.studyType}</td><td>{r.impression}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Study</th>
+                  <th>Impression</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.rads.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtDate(r.date)}</td>
+                    <td>{r.studyType}</td>
+                    <td>{r.impression}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
             <h3 className="mb-1 font-semibold">Pharmacy</h3>
             <table className="mb-4">
-              <thead><tr><th>Date</th><th>Medication</th><th>Qty</th><th>Amount</th></tr></thead>
-              <tbody>{pData.pharms.map((p) => <tr key={p.id}><td>{fmtDate(p.date)}</td><td>{p.medication}</td><td>{p.qty}</td><td>{money(p.qty * p.rate)}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Medication</th>
+                  <th>Qty</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.pharms.map((p) => (
+                  <tr key={p.id}>
+                    <td>{fmtDate(p.date)}</td>
+                    <td>{p.medication}</td>
+                    <td>{p.qty}</td>
+                    <td>{money(p.qty * p.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
             <h3 className="mb-1 font-semibold">Billing</h3>
             <table>
-              <thead><tr><th>Date</th><th>Total</th><th>Paid</th><th>Due</th></tr></thead>
-              <tbody>{pData.bills.map((b) => <tr key={b.id}><td>{fmtDate(b.date)}</td><td>{money(b.totalAmount)}</td><td>{money(b.paid)}</td><td>{money(b.due)}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Total</th>
+                  <th>Paid</th>
+                  <th>Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pData.bills.map((b) => (
+                  <tr key={b.id}>
+                    <td>{fmtDate(b.date)}</td>
+                    <td>{money(b.totalAmount)}</td>
+                    <td>{money(b.paid)}</td>
+                    <td>{money(b.due)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </>
         ) : null}

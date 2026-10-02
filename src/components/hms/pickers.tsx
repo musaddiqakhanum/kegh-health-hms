@@ -18,7 +18,11 @@ export function PatientPicker({
   );
   return (
     <div className="space-y-2">
-      <Input placeholder="Search name / MRN / phone" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Input
+        placeholder="Search name / MRN / phone"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
       <Select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Select patient…</option>
         {value && !list.some((p) => p.id === value) && state.patients[value] ? (

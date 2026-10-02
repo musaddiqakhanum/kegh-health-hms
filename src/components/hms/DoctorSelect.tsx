@@ -14,8 +14,12 @@ export function DoctorSelect({
   const doctors = Array.from(
     new Set([
       ...(settings.doctors ?? []),
-      ...Object.values(state.visits).map((v) => v.doctor).filter(Boolean),
-      ...Object.values(state.patients).map((p) => p.doctor).filter(Boolean),
+      ...Object.values(state.visits)
+        .map((v) => v.doctor)
+        .filter(Boolean),
+      ...Object.values(state.patients)
+        .map((p) => p.doctor)
+        .filter(Boolean),
     ]),
   ).sort((a, b) => a.localeCompare(b));
   const [adding, setAdding] = useState(false);
@@ -23,7 +27,10 @@ export function DoctorSelect({
 
   const add = () => {
     const clean = name.trim();
-    if (!clean) { toast.error("Enter the doctor's name"); return; }
+    if (!clean) {
+      toast.error("Enter the doctor's name");
+      return;
+    }
     if (!doctors.some((d) => d.toLowerCase() === clean.toLowerCase())) {
       updateSettings({ doctors: [...doctors, clean].sort((a, b) => a.localeCompare(b)) });
     }
@@ -57,10 +64,15 @@ export function DoctorSelect({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); add(); }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
             }}
           />
-          <Button type="button" onClick={add}>Save</Button>
+          <Button type="button" onClick={add}>
+            Save
+          </Button>
         </div>
       ) : null}
     </div>

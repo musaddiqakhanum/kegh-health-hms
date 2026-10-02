@@ -15,7 +15,10 @@ export const Route = createFileRoute("/")({
       { title: "Dashboard — KEGH HMS" },
       { name: "description", content: "Daily hospital activity, collections and recent visits." },
       { property: "og:title", content: "Dashboard — KEGH HMS" },
-      { property: "og:description", content: "Daily hospital activity, collections and recent visits." },
+      {
+        property: "og:description",
+        content: "Daily hospital activity, collections and recent visits.",
+      },
     ],
   }),
   component: Dashboard,
@@ -34,12 +37,21 @@ function Dashboard() {
   const { state, settings } = useHms();
   const [dayEnd, setDayEnd] = useState(false);
   const stats = useMemo(() => dashboardStats(state), [state]);
-  const recent = useMemo(() => sortByDateDesc(Object.values(state.visits)).slice(0, 6), [state.visits]);
+  const recent = useMemo(
+    () => sortByDateDesc(Object.values(state.visits)).slice(0, 6),
+    [state.visits],
+  );
 
   const checklist = [
-    { label: "Hospital details filled in", done: Boolean(settings.hospitalName && settings.hospitalAddress && settings.hospitalPhone) },
+    {
+      label: "Hospital details filled in",
+      done: Boolean(settings.hospitalName && settings.hospitalAddress && settings.hospitalPhone),
+    },
     { label: `Role selected (${settings.role})`, done: true },
-    { label: "Google Drive connected", done: Boolean(settings.driveClientId && getStoredToken(driveScopeFor(settings))) },
+    {
+      label: "Google Drive connected",
+      done: Boolean(settings.driveClientId && getStoredToken(driveScopeFor(settings))),
+    },
     { label: "Encryption passphrase enabled", done: settings.encryptionEnabled },
   ];
 
@@ -60,9 +72,13 @@ function Dashboard() {
 
       <Card className="sidebar-gradient text-white">
         <h2 className="text-xl font-bold">{settings.hospitalName || "KEGH LLP"}</h2>
-        <p className="mt-1 text-sm text-white/80">{settings.hospitalAddress || "Add your hospital address in Settings"}</p>
+        <p className="mt-1 text-sm text-white/80">
+          {settings.hospitalAddress || "Add your hospital address in Settings"}
+        </p>
         <p className="text-sm text-white/80">
-          {settings.hospitalPhone ? `Phone: ${settings.hospitalPhone}` : "Add a phone number in Settings"}
+          {settings.hospitalPhone
+            ? `Phone: ${settings.hospitalPhone}`
+            : "Add a phone number in Settings"}
         </p>
       </Card>
 
@@ -86,12 +102,19 @@ function Dashboard() {
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Recent visits
           </h3>
-          <DataTable columns={["Date", "Patient", "Type", "Doctor", "Diagnosis"]} rowCount={recent.length}>
+          <DataTable
+            columns={["Date", "Patient", "Type", "Doctor", "Diagnosis"]}
+            rowCount={recent.length}
+          >
             {recent.map((v) => (
               <tr key={v.id}>
                 <Td>{fmtDate(v.date)}</Td>
                 <Td>
-                  <Link to="/patients/$patientId" params={{ patientId: v.patientId }} className="text-accent underline">
+                  <Link
+                    to="/patients/$patientId"
+                    params={{ patientId: v.patientId }}
+                    className="text-accent underline"
+                  >
                     {state.patients[v.patientId]?.name ?? "—"}
                   </Link>
                 </Td>
@@ -115,7 +138,9 @@ function Dashboard() {
                 ) : (
                   <Circle className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 )}
-                <span className={c.done ? "text-foreground" : "text-muted-foreground"}>{c.label}</span>
+                <span className={c.done ? "text-foreground" : "text-muted-foreground"}>
+                  {c.label}
+                </span>
               </li>
             ))}
           </ul>
