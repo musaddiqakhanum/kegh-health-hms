@@ -231,6 +231,54 @@ export interface LabOrder {
   createdAt: number;
 }
 
+/** Statuses an imaging order moves through on its way to a report. */
+export type ImagingOrderStatus = "Ordered" | "Study done" | "Report ready" | "Cancelled";
+
+export const IMAGING_ORDER_STATUSES: ImagingOrderStatus[] = [
+  "Ordered",
+  "Study done",
+  "Report ready",
+  "Cancelled",
+];
+
+/** Quick-pick chips on the imaging order form — free text stays possible. */
+export const COMMON_IMAGING_STUDIES: string[] = [
+  "X-Ray Chest PA",
+  "X-Ray KUB",
+  "USG Abdomen",
+  "USG Pelvis",
+  "USG Obstetric (ANC)",
+  "CT Brain",
+  "CT Abdomen",
+  "MRI Brain",
+  "MRI Spine",
+  "ECG",
+  "2D Echo",
+  "Mammography",
+];
+
+/** A request for imaging: doctor orders → study performed → report entered. */
+export interface ImagingOrder {
+  id: ID;
+  patientId: ID;
+  visitId: ID;
+  /** Order date, YYYY-MM-DD. */
+  date: string;
+  /** Studies requested, text (one or more, comma-separated). */
+  study: string;
+  priority: LabOrderPriority;
+  status: ImagingOrderStatus;
+  orderedBy: string;
+  notes: string;
+  /** Scan details, stamped when the study is performed. */
+  performedDate?: string | undefined;
+  performedTime?: string | undefined;
+  performedBy?: string | undefined;
+  /** Radiology report fulfilling this order, when one was entered from it. */
+  radId?: ID | undefined;
+  createdAt: number;
+}
+
 export interface Lab {
   id: ID;
   patientId: ID;
@@ -669,6 +717,7 @@ export type Collection =
   | "labs"
   | "labOrders"
   | "rads"
+  | "imagingOrders"
   | "pharms"
   | "meds"
   | "batches"
@@ -693,6 +742,7 @@ export const COLLECTIONS: Collection[] = [
   "labs",
   "labOrders",
   "rads",
+  "imagingOrders",
   "pharms",
   "meds",
   "batches",
@@ -717,6 +767,7 @@ export interface HmsState {
   labs: Record<ID, Lab>;
   labOrders: Record<ID, LabOrder>;
   rads: Record<ID, Rad>;
+  imagingOrders: Record<ID, ImagingOrder>;
   pharms: Record<ID, Pharm>;
   meds: Record<ID, Med>;
   batches: Record<ID, StockBatch>;
@@ -805,6 +856,7 @@ export const emptyState = (): HmsState => ({
   labs: {},
   labOrders: {},
   rads: {},
+  imagingOrders: {},
   pharms: {},
   meds: {},
   batches: {},

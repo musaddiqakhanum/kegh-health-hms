@@ -40,3 +40,5 @@
       from any duty role; open/handled tracking; attachments sync with Drive
 - [x] IPD bed charges to billing — days stayed × bed rate posted to the
       patient's bill with one click, never duplicated (same bill updated)
+- [x] Imaging order queue — order → study done → report with findings /
+      impression, urgent flag, requisition slip print, diagnostics workspace
