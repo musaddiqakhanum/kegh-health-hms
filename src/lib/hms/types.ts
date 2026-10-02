@@ -73,6 +73,62 @@ export interface Visit {
 
 export type LabFlag = "normal" | "high" | "low" | "critical";
 
+/** Statuses a lab order moves through on its way to a result. */
+export type LabOrderStatus = "Ordered" | "Sample collected" | "Result ready" | "Cancelled";
+
+export const LAB_ORDER_STATUSES: LabOrderStatus[] = [
+  "Ordered",
+  "Sample collected",
+  "Result ready",
+  "Cancelled",
+];
+
+export type LabOrderPriority = "Routine" | "Urgent";
+
+export const LAB_ORDER_PRIORITIES: LabOrderPriority[] = ["Routine", "Urgent"];
+
+/** Quick-pick chips on the order form — free text stays possible. */
+export const COMMON_LAB_TESTS: string[] = [
+  "CBC",
+  "Haemoglobin",
+  "Blood sugar (F)",
+  "Blood sugar (PP)",
+  "HbA1c",
+  "LFT",
+  "KFT / RFT",
+  "Lipid profile",
+  "Thyroid profile",
+  "Urine routine",
+  "CRP",
+  "ESR",
+  "Widal",
+  "Dengue NS1",
+  "HIV",
+  "HBsAg",
+];
+
+/** A request for lab work: doctor orders → sample collected → result entered. */
+export interface LabOrder {
+  id: ID;
+  patientId: ID;
+  visitId: ID;
+  /** Order date, YYYY-MM-DD. */
+  date: string;
+  /** Tests requested, text (one or more, comma-separated). */
+  tests: string;
+  priority: LabOrderPriority;
+  status: LabOrderStatus;
+  orderedBy: string;
+  notes: string;
+  /** Sample collection details, stamped when the sample is taken. */
+  collectedDate?: string | undefined;
+  collectedTime?: string | undefined;
+  collectedBy?: string | undefined;
+  /** Lab result entry fulfilling this order, when one was entered from it. */
+  labResultId?: ID | undefined;
+  createdAt: number;
+}
+
 export interface Lab {
   id: ID;
   patientId: ID;
@@ -495,6 +551,7 @@ export type Collection =
   | "patients"
   | "visits"
   | "labs"
+  | "labOrders"
   | "rads"
   | "pharms"
   | "meds"
@@ -515,6 +572,7 @@ export const COLLECTIONS: Collection[] = [
   "patients",
   "visits",
   "labs",
+  "labOrders",
   "rads",
   "pharms",
   "meds",
@@ -535,6 +593,7 @@ export interface HmsState {
   patients: Record<ID, Patient>;
   visits: Record<ID, Visit>;
   labs: Record<ID, Lab>;
+  labOrders: Record<ID, LabOrder>;
   rads: Record<ID, Rad>;
   pharms: Record<ID, Pharm>;
   meds: Record<ID, Med>;
@@ -619,6 +678,7 @@ export const emptyState = (): HmsState => ({
   patients: {},
   visits: {},
   labs: {},
+  labOrders: {},
   rads: {},
   pharms: {},
   meds: {},

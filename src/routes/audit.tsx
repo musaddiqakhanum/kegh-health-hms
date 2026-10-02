@@ -60,6 +60,12 @@ function recordLabel(state: ReturnType<typeof useHms>["state"], a: AuditLog): st
       const rx = byId(state.prescriptions);
       return rx ? `Rx · ${state.patients[rx.patientId]?.name ?? ""}` : "";
     }
+    case "labOrders": {
+      const lo = byId(state.labOrders);
+      return lo
+        ? `${state.patients[lo.patientId]?.name ?? "—"} · ${lo.tests.split(",")[0]?.trim() ?? ""}`
+        : "";
+    }
     case "pharms": {
       const ph = byId(state.pharms);
       return ph ? `${ph.medication} · ${state.patients[ph.patientId]?.name ?? ""}` : "";
