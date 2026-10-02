@@ -7,6 +7,7 @@ import {
   FlaskConical,
   History,
   IndianRupee,
+  NotebookPen,
   LayoutDashboard,
   LayoutGrid,
   ListOrdered,
@@ -32,6 +33,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: "/workspace", label: "My workspace", icon: LayoutGrid, key: "workspace" },
+  { to: "/handover", label: "Shift Handover", icon: NotebookPen, key: "handover" },
   { to: "/", label: "Dashboard", icon: LayoutDashboard, key: "dash" },
   { to: "/patients", label: "Patients", icon: Users, key: "patients" },
   { to: "/appointments", label: "Appointments", icon: CalendarDays, key: "appointments" },
@@ -61,6 +63,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
   // Reception runs the front desk: appointments and the OPD token queue.
   Reception: [
     "workspace",
+    "handover",
     "dash",
     "patients",
     "appointments",
@@ -73,6 +76,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
   ],
   Doctor: [
     "workspace",
+    "handover",
     "dash",
     "patients",
     "appointments",
@@ -86,9 +90,9 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "pharms",
     "settings",
   ],
-  Lab: ["workspace", "dash", "patients", "labs", "labOrders", "reports", "settings"],
-  Pharmacy: ["workspace", "dash", "patients", "pharms", "reports", "settings"],
-  Billing: ["workspace", "dash", "patients", "billing", "reports", "settings"],
+  Lab: ["workspace", "handover", "dash", "patients", "labs", "labOrders", "reports", "settings"],
+  Pharmacy: ["workspace", "handover", "dash", "patients", "pharms", "reports", "settings"],
+  Billing: ["workspace", "handover", "dash", "patients", "billing", "reports", "settings"],
 };
 
 export function navForRole(role: Role): NavItem[] {
