@@ -106,6 +106,8 @@ export interface Admission {
   dischargeSummary?: string | undefined;
   dischargeAdvice?: string | undefined;
   dischargedBy?: string | undefined;
+  /** Bill the bed charges were posted to — guards against double-posting. */
+  bedChargeBillId?: ID | undefined;
   createdAt: number;
 }
 

@@ -4,6 +4,7 @@ import {
   BedDouble,
   Download,
   DoorOpen,
+  IndianRupee,
   Pencil,
   Plus,
   Printer,
@@ -15,12 +16,13 @@ import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
 import { fmtDate, money, todayISO } from "@/lib/hms/format";
 import { downloadCsv } from "@/lib/hms/csv";
-import { WARDS, type Admission, type Bed, type Visit } from "@/lib/hms/types";
+import { WARDS, type Admission, type Bed, type Bill, type Visit } from "@/lib/hms/types";
 import {
   activeAdmissionForBed,
   activeAdmissionForPatient,
   activeAdmissions,
   admissionList,
+  bedChargeFor,
   bedList,
   bedStats,
   freeBeds,
@@ -276,6 +278,55 @@ function AdmissionsTab() {
     }
   };
 
+  /** Post days-stayed × bed-rate to the patient's bill — new bill the first
+      time, amount refreshed on the same bill afterwards (never duplicated). */
+  const postBedCharges = (a: Admission) => {
+    const charge = bedChargeFor(state, a);
+    if (!charge) {
+      toast.error("This bed has no per-day rate — set it on the Beds tab, or bill manually");
+      return;
+    }
+    const line = {
+      description: charge.description,
+      qty: charge.days,
+      rate: charge.rate,
+      amount: charge.amount,
+    };
+    if (a.bedChargeBillId && state.bills[a.bedChargeBillId]) {
+      const bill = state.bills[a.bedChargeBillId]!;
+      const items = [
+        line,
+        ...bill.items.filter((i) => !i.description.startsWith("Bed charges — ")),
+      ];
+      const subtotal = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+      const totalAmount = subtotal - Number(bill.discount || 0) + Number(bill.tax || 0);
+      upsert<Bill>("bills", {
+        id: bill.id,
+        items,
+        totalAmount,
+        due: Math.max(0, totalAmount - Number(bill.paid || 0)),
+      } as Bill);
+      toast.success(`Bed charges updated on the existing bill — ${money(totalAmount)}`);
+    } else {
+      const billId = crypto.randomUUID();
+      upsert<Bill>("bills", {
+        id: billId,
+        patientId: a.patientId,
+        visitId: a.visitId || "",
+        date: todayISO(),
+        items: [line],
+        totalAmount: charge.amount,
+        discount: 0,
+        tax: 0,
+        paid: 0,
+        due: charge.amount,
+        paymentMode: "",
+      } as Bill);
+      upsert<Admission>("admissions", { id: a.id, bedChargeBillId: billId });
+      toast.success(`Bed charges posted — new bill of ${money(charge.amount)}`);
+    }
+  };
+
   const exportCsv = () => {
     downloadCsv("ipd-admissions.csv", [
       [
@@ -382,8 +433,20 @@ function AdmissionsTab() {
                     Discharged {a.dischargeDate ? fmtDate(a.dischargeDate) : ""}
                   </Badge>
                 )}
+                {a.bedChargeBillId ? (
+                  <div className="mt-1">
+                    <Badge tone="neutral">bed billed</Badge>
+                  </div>
+                ) : null}
               </Td>
               <Td className="whitespace-nowrap">
+                <button
+                  title="Post days-stayed × bed-rate to the patient's bill"
+                  className="mr-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => postBedCharges(a)}
+                >
+                  <IndianRupee className="h-4 w-4" />
+                </button>
                 {a.status === "Admitted" ? (
                   <Button
                     variant="outline"
