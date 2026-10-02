@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { loadState, saveState } from "./db";
 import { mergeStates } from "./merge";
+import { craftAuditEntry, isAuditedCollection } from "./audit";
 import {
   defaultSettings,
   emptyState,
@@ -56,6 +57,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   const [online, setOnline] = useState(true);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +82,33 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  /* Stamp one audit row into the same state object as the write it logs —
+     a single persist, mergeable like any record, and no extra render pass. */
+  const audit = useCallback(
+    (
+      prev: HmsState,
+      action: "create" | "update" | "delete",
+      collection: string,
+      recordId: string,
+      now: number,
+    ) => {
+      if (!isAuditedCollection(collection)) return { auditLogs: prev.auditLogs, entries: {} };
+      const entry = craftAuditEntry({
+        state: prev,
+        settings: settingsRef.current,
+        action,
+        collection,
+        recordId,
+        now,
+      });
+      return {
+        auditLogs: { ...prev.auditLogs, [entry.id]: entry },
+        entries: { [`auditLogs:${entry.id}`]: now },
+      };
+    },
+    [],
+  );
+
   const persist = useCallback((next: HmsState) => {
     stateRef.current = next;
     setState(next);
@@ -91,18 +121,26 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       const id = record.id ?? crypto.randomUUID();
       const prev = stateRef.current;
       const existing = (prev[collection] as Record<string, Rec>)[id];
+      const { auditLogs, entries } = audit(
+        prev,
+        existing ? "update" : "create",
+        collection,
+        id,
+        now,
+      );
       const next: HmsState = {
         ...prev,
         [collection]: {
           ...prev[collection],
           [id]: { ...existing, ...record, id, createdAt: existing?.createdAt ?? now },
         },
-        ops: { ...prev.ops, [`${collection}:${id}`]: now },
+        auditLogs,
+        ops: { ...prev.ops, ...entries, [`${collection}:${id}`]: now },
       };
       persist(next);
       return id;
     },
-    [persist],
+    [persist, audit],
   );
 
   const remove = useCallback<StoreCtx["remove"]>(
@@ -110,13 +148,17 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       const prev = stateRef.current;
       const copy = { ...(prev[collection] as Record<string, unknown>) };
       delete copy[id];
+      const now = Date.now();
+      const { auditLogs, entries } = audit(prev, "delete", collection, id, now);
       persist({
         ...prev,
         [collection]: copy,
-        deleted: { ...prev.deleted, [`${collection}:${id}`]: Date.now() },
+        auditLogs,
+        ops: { ...prev.ops, ...entries },
+        deleted: { ...prev.deleted, [`${collection}:${id}`]: now },
       });
     },
-    [persist],
+    [persist, audit],
   );
 
   const replaceState = useCallback((next: HmsState) => persist(next), [persist]);
@@ -134,7 +176,17 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ state, settings, ready, online, upsert, remove, replaceState, mergeIn, updateSettings }),
+    () => ({
+      state,
+      settings,
+      ready,
+      online,
+      upsert,
+      remove,
+      replaceState,
+      mergeIn,
+      updateSettings,
+    }),
     [state, settings, ready, online, upsert, remove, replaceState, mergeIn, updateSettings],
   );
 
