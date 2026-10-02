@@ -382,6 +382,11 @@ export function isPrescriptionItem(v: unknown): v is PrescriptionItem {
 
 export type PrescriptionSource = "visit" | "queue";
 
+/** Fulfilment state of a prescription at the pharmacy counter. */
+export type RxFulfilStatus = "Pending" | "Partial" | "Dispensed";
+
+export const RX_FULFIL_STATUSES: RxFulfilStatus[] = ["Pending", "Partial", "Dispensed"];
+
 export interface Prescription {
   id: ID;
   patientId: ID;
@@ -393,6 +398,13 @@ export interface Prescription {
   notes: string;
   /** Freely-typed sign-off; defaults to the prescribing doctor name. */
   signOff: string;
+  /** Parallel to items: true once the pharmacy has handed that medicine over. */
+  itemDispensed?: boolean[] | undefined;
+  /** Derived fulfilment state — kept on the record for filtering and reports. */
+  dispenseStatus?: RxFulfilStatus | undefined;
+  /** Who last dispensed against this prescription, and when (ms epoch). */
+  dispensedBy?: string | undefined;
+  dispensedAt?: number | undefined;
   createdAt: number;
 }
 

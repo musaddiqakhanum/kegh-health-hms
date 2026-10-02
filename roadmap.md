@@ -31,3 +31,6 @@
       (every upsert/delete stamps action, collection, record, role and device)
 - [x] Lab order queue — order → sample collected → result, urgent flag,
       requisition slip print, Lab workspace queue (was the honest stand-in)
+- [x] Prescription fulfilment — counter queue (Pending / Partial / Dispensed),
+      per-item ticks, one-click dispense that writes entries and draws stock
+      FEFO; Pharmacy workspace counter queue (last stand-in removed)
