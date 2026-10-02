@@ -27,4 +27,5 @@
 - [x] Per-person role workspaces — Reception, Doctor, Lab, Pharmacy, Billing; Admin keeps the dashboard
 - [x] Pharmacy inventory — batches, expiry, GRN, reorder levels, low-stock alerts
       (catalog + FEFO dispensing, batch write-offs, supplier invoices, stock valuation)
-- [ ] Audit trail viewer (Admin, read-only) plus CRUD audit writer
+- [x] Audit trail viewer (Admin, read-only) plus CRUD audit writer
+      (every upsert/delete stamps action, collection, record, role and device)

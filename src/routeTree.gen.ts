@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as LaboratoryRouteImport } from './routes/laboratory'
@@ -36,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppointmentsRoute = AppointmentsRouteImport.update({
   id: '/appointments',
   path: '/appointments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BillingRoute = BillingRouteImport.update({
@@ -122,6 +128,7 @@ const PatientsPatientIdRoute = PatientsPatientIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/appointments': typeof AppointmentsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
   '/laboratory': typeof LaboratoryRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/appointments': typeof AppointmentsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
   '/laboratory': typeof LaboratoryRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/appointments': typeof AppointmentsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/expenses': typeof ExpensesRoute
   '/laboratory': typeof LaboratoryRoute
@@ -185,6 +194,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/appointments'
+    | '/audit'
     | '/billing'
     | '/expenses'
     | '/laboratory'
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/appointments'
+    | '/audit'
     | '/billing'
     | '/expenses'
     | '/laboratory'
@@ -225,6 +236,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/appointments'
+    | '/audit'
     | '/billing'
     | '/expenses'
     | '/laboratory'
@@ -246,6 +258,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppointmentsRoute: typeof AppointmentsRoute
+  AuditRoute: typeof AuditRoute
   BillingRoute: typeof BillingRoute
   ExpensesRoute: typeof ExpensesRoute
   LaboratoryRoute: typeof LaboratoryRoute
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       path: '/appointments'
       fullPath: '/appointments'
       preLoaderRoute: typeof AppointmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/billing': {
@@ -398,6 +418,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppointmentsRoute: AppointmentsRoute,
+  AuditRoute: AuditRoute,
   BillingRoute: BillingRoute,
   ExpensesRoute: ExpensesRoute,
   LaboratoryRoute: LaboratoryRoute,

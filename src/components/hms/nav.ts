@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Cloud,
   FlaskConical,
+  History,
   IndianRupee,
   LayoutDashboard,
   LayoutGrid,
@@ -43,6 +44,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/payroll", label: "Payroll", icon: Banknote, key: "payroll" },
   { to: "/expenses", label: "Expenses", icon: Receipt, key: "expenses" },
   { to: "/reports", label: "Reports", icon: BarChart3, key: "reports" },
+  // Admin-only: every other role's key list below simply omits "audit".
+  { to: "/audit", label: "Audit Trail", icon: History, key: "audit" },
   { to: "/sync", label: "Google Drive Sync", icon: Cloud, key: "sync" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, key: "settings" },
 ];
