@@ -53,6 +53,62 @@ export const PMJAY_SCHEMES: string[] = [
 
 export type VisitType = "OPD" | "IPD" | "Emergency";
 
+/** Quick picks for the ward field on beds and the bed board. */
+export const WARDS: string[] = [
+  "General Ward",
+  "Male Ward",
+  "Female Ward",
+  "Maternity",
+  "Pediatric",
+  "Private Room",
+  "Semi-Private",
+  "ICU",
+  "Emergency",
+];
+
+/** One physical bed in the hospital — occupancy is derived from admissions. */
+export interface Bed {
+  id: ID;
+  ward: string;
+  /** Room / cubicle, e.g. "101". */
+  room: string;
+  /** Bed label shown on the board, e.g. "101-A". */
+  label: string;
+  /** Per-day bed charge (₹) — shown on the board, picked up by billing later. */
+  rate: number;
+  /** Inactive beds are hidden from the board and pickers. */
+  active: boolean;
+  notes: string;
+  createdAt: number;
+}
+
+export type AdmissionStatus = "Admitted" | "Discharged";
+
+export const ADMISSION_STATUSES: AdmissionStatus[] = ["Admitted", "Discharged"];
+
+/** An IPD stay: occupies a bed from admit until discharge. */
+export interface Admission {
+  id: ID;
+  patientId: ID;
+  /** Linked IPD visit, when one exists. */
+  visitId: ID;
+  bedId: ID;
+  admitDate: string;
+  admitTime: string;
+  /** Provisional diagnosis / reason for admission. */
+  reason: string;
+  /** Treating doctor. */
+  doctor: string;
+  status: AdmissionStatus;
+  /** Discharge block — filled by the discharge modal. */
+  dischargeDate?: string | undefined;
+  dischargeTime?: string | undefined;
+  dischargeSummary?: string | undefined;
+  dischargeAdvice?: string | undefined;
+  dischargedBy?: string | undefined;
+  createdAt: number;
+}
+
 export interface Visit {
   id: ID;
   patientId: ID;
@@ -562,6 +618,8 @@ export interface AuditLog {
 export type Collection =
   | "patients"
   | "visits"
+  | "admissions"
+  | "beds"
   | "labs"
   | "labOrders"
   | "rads"
@@ -583,6 +641,8 @@ export type Collection =
 export const COLLECTIONS: Collection[] = [
   "patients",
   "visits",
+  "admissions",
+  "beds",
   "labs",
   "labOrders",
   "rads",
@@ -604,6 +664,8 @@ export const COLLECTIONS: Collection[] = [
 export interface HmsState {
   patients: Record<ID, Patient>;
   visits: Record<ID, Visit>;
+  admissions: Record<ID, Admission>;
+  beds: Record<ID, Bed>;
   labs: Record<ID, Lab>;
   labOrders: Record<ID, LabOrder>;
   rads: Record<ID, Rad>;
@@ -689,6 +751,8 @@ export interface Settings {
 export const emptyState = (): HmsState => ({
   patients: {},
   visits: {},
+  admissions: {},
+  beds: {},
   labs: {},
   labOrders: {},
   rads: {},

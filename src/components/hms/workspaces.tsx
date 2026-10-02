@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import {
+  BedDouble,
   CalendarDays,
   ClipboardList,
   FlaskConical,
@@ -37,6 +38,7 @@ import {
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { pendingRx, rxFulfilStats } from "@/lib/hms/fulfil";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
+import { bedStats } from "@/lib/hms/ipd";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
@@ -167,6 +169,7 @@ export function ReceptionWorkspace() {
   const today = todayISO();
   const day = useMemo(() => appointmentsOn(state, today), [state, today]);
   const queue = useMemo(() => queueStats(state, today), [state, today]);
+  const bedsOccupied = useMemo(() => bedStats(state), [state]);
   const due = useMemo(() => dueBills(state), [state]);
   const serving = useMemo(() => waitingQueue(state, today)[0] ?? null, [state, today]);
   const count = (s: Appointment["status"]) => day.filter((a) => a.status === s).length;
@@ -195,6 +198,12 @@ export function ReceptionWorkspace() {
         <WsStat to="/appointments" label="Scheduled" value={count("Scheduled")} />
         <WsStat to="/appointments" label="Confirmed" value={count("Confirmed")} />
         <WsStat to="/queue" label="Waiting in queue" value={count("CheckedIn")} tone="amber" />
+        <WsStat
+          to="/ipd"
+          label="Beds occupied"
+          value={bedsOccupied.total ? `${bedsOccupied.occupied}/${bedsOccupied.total}` : "—"}
+          tone={bedsOccupied.pct >= 90 ? "red" : undefined}
+        />
         <WsStat
           to="/appointments"
           label="Completed today"
@@ -285,6 +294,12 @@ export function ReceptionWorkspace() {
               label: "See unpaid bills",
               icon: IndianRupee,
               hint: `${due.length} bill${due.length === 1 ? "" : "s"} with dues`,
+            },
+            {
+              to: "/ipd",
+              label: "IPD bed board",
+              icon: BedDouble,
+              hint: "Admissions and beds",
             },
           ]}
         />
@@ -431,6 +446,7 @@ export function DoctorWorkspace() {
             hint: "With letterhead print",
           },
           { to: "/lab-orders", label: "Order lab tests", icon: TestTube2, hint: "With priority" },
+          { to: "/ipd", label: "IPD & admissions", icon: BedDouble, hint: "Admit a patient" },
           { to: "/radiology", label: "Radiology", icon: Scan, hint: "Studies and impressions" },
         ]}
       />
