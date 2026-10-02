@@ -10,6 +10,7 @@ import {
   Scan,
   ScrollText,
   Stethoscope,
+  TestTube2,
   UserCheck,
   Users,
   type LucideIcon,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
+import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
 import type { Appointment } from "@/lib/hms/types";
@@ -427,7 +429,7 @@ export function DoctorWorkspace() {
             icon: ScrollText,
             hint: "With letterhead print",
           },
-          { to: "/laboratory", label: "Laboratory", icon: FlaskConical, hint: "Results and flags" },
+          { to: "/lab-orders", label: "Order lab tests", icon: TestTube2, hint: "With priority" },
           { to: "/radiology", label: "Radiology", icon: Scan, hint: "Studies and impressions" },
         ]}
       />
@@ -611,6 +613,8 @@ export function LabWorkspace() {
   const labsToday = labs.filter((l) => isSameDay(l.date)).length;
   const critical = labs.filter((l) => l.flag === "critical").length;
   const recent = labs.slice(0, 8);
+  const orders = useMemo(() => openOrders(state).slice(0, 8), [state]);
+  const oq = useMemo(() => orderQueueStats(state), [state]);
   const tone = (f: string) =>
     (f === "normal" ? "green" : f === "critical" ? "red" : "amber") as "green" | "red" | "amber";
 
@@ -619,29 +623,70 @@ export function LabWorkspace() {
       <WsHeader title="Laboratory" person={user?.displayName} extra="Lab workspace" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <WsStat
+          to="/lab-orders"
+          label="Awaiting sample"
+          value={oq.awaitingSample}
+          tone={oq.awaitingSample ? "amber" : undefined}
+        />
+        <WsStat
+          to="/lab-orders"
+          label="Awaiting result"
+          value={oq.awaitingResult}
+          tone={oq.awaitingResult ? "amber" : undefined}
+        />
         <WsStat to="/laboratory" label="Lab entries today" value={labsToday} />
-        <WsStat to="/laboratory" label="Lab entries (all)" value={labs.length} />
         <WsStat
           to="/laboratory"
           label="Critical flags"
           value={critical}
           tone={critical ? "red" : undefined}
         />
-        <WsStat
-          to="/patients"
-          label="Patients on file"
-          value={Object.keys(state.patients).length}
-        />
       </div>
+
+      <Section
+        title="Lab order queue"
+        badge={
+          <Badge tone={orders.length ? "amber" : "neutral"}>
+            {oq.awaitingSample + oq.awaitingResult} open
+          </Badge>
+        }
+      >
+        {orders.length === 0 ? (
+          <EmptyRow>Queue clear — no orders waiting for samples or results.</EmptyRow>
+        ) : (
+          <ul className="space-y-2">
+            {orders.map((o) => (
+              <li
+                key={o.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 ring-1 ring-border/60"
+              >
+                {o.priority === "Urgent" ? <Badge tone="red">Urgent</Badge> : null}
+                <Link
+                  to="/patients/$patientId"
+                  params={{ patientId: o.patientId }}
+                  className="text-sm font-medium text-accent underline"
+                >
+                  {patientName(state, o.patientId)}
+                </Link>
+                <span className="text-sm">{o.tests}</span>
+                <Badge tone={o.status === "Ordered" ? "amber" : "green"}>{o.status}</Badge>
+                <Link
+                  to="/lab-orders"
+                  className="ml-auto text-sm font-medium text-accent underline"
+                >
+                  {o.status === "Ordered" ? "Collect sample →" : "Enter result →"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       <Section
         title="Recent lab results"
         badge={<Badge tone="neutral">{recent.length} shown</Badge>}
       >
-        <p className="mb-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Lab entries have no awaiting-results status yet, so this workspace lists recent activity
-          only — there is no results queue to show.
-        </p>
         {recent.length === 0 ? (
           <EmptyRow>No lab entries yet.</EmptyRow>
         ) : (
@@ -678,6 +723,12 @@ export function LabWorkspace() {
       <QuickLinks
         title="Quick actions"
         links={[
+          {
+            to: "/lab-orders",
+            label: "Lab order queue",
+            icon: TestTube2,
+            hint: "Samples and results",
+          },
           {
             to: "/laboratory",
             label: "New lab entry",

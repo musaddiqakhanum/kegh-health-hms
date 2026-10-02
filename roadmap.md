@@ -29,3 +29,5 @@
       (catalog + FEFO dispensing, batch write-offs, supplier invoices, stock valuation)
 - [x] Audit trail viewer (Admin, read-only) plus CRUD audit writer
       (every upsert/delete stamps action, collection, record, role and device)
+- [x] Lab order queue — order → sample collected → result, urgent flag,
+      requisition slip print, Lab workspace queue (was the honest stand-in)
