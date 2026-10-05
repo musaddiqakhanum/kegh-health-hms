@@ -43,6 +43,20 @@ export function activeAdmissions(state: HmsState): Admission[] {
     );
 }
 
+/**
+ * Every stay a patient has had — open admission first, then most recent
+ * admit date. The Patient 360 admissions card shows this list.
+ */
+export function admissionsForPatient(state: HmsState, patientId: string): Admission[] {
+  return admissionList(state)
+    .filter((a) => a.patientId === patientId)
+    .sort((a, b) => {
+      const open = (a.status === "Admitted" ? 0 : 1) - (b.status === "Admitted" ? 0 : 1);
+      if (open !== 0) return open;
+      return (b.admitDate || "").localeCompare(a.admitDate || "") || b.createdAt - a.createdAt;
+    });
+}
+
 /** Inclusive day count of a stay — day 1 is the admit day itself. */
 export function stayDays(admitDate: string, endDate = todayISO()): number {
   const a = new Date(`${(admitDate || "").slice(0, 10)}T00:00:00`);

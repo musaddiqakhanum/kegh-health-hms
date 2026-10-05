@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import {
   BedDouble,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   FlaskConical,
   IndianRupee,
@@ -39,6 +40,7 @@ import {
 import { fmtDate, isSameDay, money, todayISO } from "@/lib/hms/format";
 import { pendingRx, rxFulfilStats } from "@/lib/hms/fulfil";
 import { handoverStats } from "@/lib/hms/handover";
+import { imagingQueueStats, openImagingOrders } from "@/lib/hms/imaging";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { bedStats } from "@/lib/hms/ipd";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
@@ -461,6 +463,12 @@ export function DoctorWorkspace() {
             hint: "With letterhead print",
           },
           { to: "/lab-orders", label: "Order lab tests", icon: TestTube2, hint: "With priority" },
+          {
+            to: "/imaging-orders",
+            label: "Order imaging",
+            icon: ClipboardCheck,
+            hint: "X-Ray / USG / CT",
+          },
           { to: "/ipd", label: "IPD & admissions", icon: BedDouble, hint: "Admit a patient" },
           { to: "/handover", label: "Shift handover", icon: NotebookPen, hint: "Notes for relief" },
           { to: "/radiology", label: "Radiology", icon: Scan, hint: "Studies and impressions" },
@@ -647,6 +655,8 @@ export function LabWorkspace() {
   const recent = labs.slice(0, 8);
   const orders = useMemo(() => openOrders(state).slice(0, 8), [state]);
   const oq = useMemo(() => orderQueueStats(state), [state]);
+  const imgOrders = useMemo(() => openImagingOrders(state).slice(0, 8), [state]);
+  const iq = useMemo(() => imagingQueueStats(state), [state]);
   const tone = (f: string) =>
     (f === "normal" ? "green" : f === "critical" ? "red" : "amber") as "green" | "red" | "amber";
 
@@ -673,6 +683,18 @@ export function LabWorkspace() {
           label="Critical flags"
           value={critical}
           tone={critical ? "red" : undefined}
+        />
+        <WsStat
+          to="/imaging-orders"
+          label="Awaiting scan"
+          value={iq.awaitingScan}
+          tone={iq.awaitingScan ? "amber" : undefined}
+        />
+        <WsStat
+          to="/imaging-orders"
+          label="Awaiting report"
+          value={iq.awaitingReport}
+          tone={iq.awaitingReport ? "amber" : undefined}
         />
       </div>
 
@@ -708,6 +730,45 @@ export function LabWorkspace() {
                   className="ml-auto text-sm font-medium text-accent underline"
                 >
                   {o.status === "Ordered" ? "Collect sample →" : "Enter result →"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        title="Imaging order queue"
+        badge={
+          <Badge tone={imgOrders.length ? "amber" : "neutral"}>
+            {iq.awaitingScan + iq.awaitingReport} open
+          </Badge>
+        }
+      >
+        {imgOrders.length === 0 ? (
+          <EmptyRow>Queue clear — no studies waiting to be scanned or reported.</EmptyRow>
+        ) : (
+          <ul className="space-y-2">
+            {imgOrders.map((o) => (
+              <li
+                key={o.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 ring-1 ring-border/60"
+              >
+                {o.priority === "Urgent" ? <Badge tone="red">Urgent</Badge> : null}
+                <Link
+                  to="/patients/$patientId"
+                  params={{ patientId: o.patientId }}
+                  className="text-sm font-medium text-accent underline"
+                >
+                  {patientName(state, o.patientId)}
+                </Link>
+                <span className="text-sm">{o.study}</span>
+                <Badge tone={o.status === "Ordered" ? "amber" : "green"}>{o.status}</Badge>
+                <Link
+                  to="/imaging-orders"
+                  className="ml-auto text-sm font-medium text-accent underline"
+                >
+                  {o.status === "Ordered" ? "Mark scanned →" : "Enter report →"}
                 </Link>
               </li>
             ))}
@@ -760,6 +821,12 @@ export function LabWorkspace() {
             label: "Lab order queue",
             icon: TestTube2,
             hint: "Samples and results",
+          },
+          {
+            to: "/imaging-orders",
+            label: "Imaging order queue",
+            icon: ClipboardCheck,
+            hint: "Scans and reports",
           },
           {
             to: "/laboratory",

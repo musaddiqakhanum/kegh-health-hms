@@ -5,6 +5,10 @@ import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { ageFromDob, fmtDate, fmtDateTime, money } from "@/lib/hms/format";
 import { prescriptionSummary, prescriptionsForPatient, sortByDateDesc } from "@/lib/hms/selectors";
+import { admissionsForPatient } from "@/lib/hms/ipd";
+import { ordersForPatient } from "@/lib/hms/laborders";
+import { imagingOrdersForPatient } from "@/lib/hms/imaging";
+import { notesForPatient } from "@/lib/hms/handover";
 import { downloadCsv } from "@/lib/hms/csv";
 import { formatAbhaNumber } from "@/lib/abdm/healthId";
 import type { AppointmentStatus, Patient } from "@/lib/hms/types";
@@ -40,6 +44,10 @@ const apptTone = (s: AppointmentStatus): "green" | "amber" | "red" | "neutral" =
       ? "amber"
       : "red";
 
+/** Queue-order badges: done → green, open → amber, cancelled → neutral. */
+const orderTone = (s: string): "green" | "amber" | "neutral" =>
+  s === "Result ready" || s === "Report ready" ? "green" : s === "Cancelled" ? "neutral" : "amber";
+
 function Patient360() {
   const { patientId } = Route.useParams();
   const { state, upsert } = useHms();
@@ -66,6 +74,13 @@ function Patient360() {
     () => prescriptionsForPatient(state, patientId),
     [state, patientId],
   );
+  const admissions = useMemo(() => admissionsForPatient(state, patientId), [state, patientId]);
+  const labOrderRows = useMemo(() => ordersForPatient(state, patientId), [state, patientId]);
+  const imagingOrderRows = useMemo(
+    () => imagingOrdersForPatient(state, patientId),
+    [state, patientId],
+  );
+  const handoverRows = useMemo(() => notesForPatient(state, patientId), [state, patientId]);
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -102,6 +117,30 @@ function Patient360() {
     );
     labs.forEach((l) => rows.push(["Lab", l.date, l.testName, `${l.result} ${l.unit}`, l.flag]));
     rads.forEach((r) => rows.push(["Radiology", r.date, r.studyType, r.impression, r.radiologist]));
+    admissions.forEach((a) =>
+      rows.push([
+        "Admission",
+        a.admitDate,
+        a.status,
+        state.beds[a.bedId] ? `${state.beds[a.bedId]!.ward} · ${state.beds[a.bedId]!.label}` : "",
+        a.dischargeDate ? `Discharged ${a.dischargeDate}` : "",
+      ]),
+    );
+    labOrderRows.forEach((o) =>
+      rows.push(["Lab order", o.date, o.tests, `${o.priority} · ${o.status}`, o.orderedBy]),
+    );
+    imagingOrderRows.forEach((o) =>
+      rows.push(["Imaging order", o.date, o.study, `${o.priority} · ${o.status}`, o.orderedBy]),
+    );
+    handoverRows.forEach((n) =>
+      rows.push([
+        "Handover note",
+        n.date,
+        `${n.category}${n.resolved ? " (handled)" : ""}`,
+        n.text.replace(/\s+/g, " ").slice(0, 120),
+        n.author,
+      ]),
+    );
     pharms.forEach((p) =>
       rows.push(["Pharmacy", p.date, p.medication, `${p.qty} x ${p.rate}`, p.qty * p.rate]),
     );
@@ -315,6 +354,146 @@ function Patient360() {
                   </p>
                 </li>
               ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              IPD admissions ({admissions.length})
+            </h3>
+            <Link to="/ipd" className="text-xs font-medium text-accent underline">
+              IPD & beds →
+            </Link>
+          </div>
+          {admissions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Never admitted.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {admissions.slice(0, 6).map((a) => {
+                const bed = state.beds[a.bedId];
+                return (
+                  <li key={a.id} className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{fmtDate(a.admitDate)}</span>
+                    <span className="text-muted-foreground">
+                      {bed ? `${bed.ward} · ${bed.label}` : "—"}
+                    </span>
+                    {a.dischargeDate ? (
+                      <span className="text-muted-foreground">→ {fmtDate(a.dischargeDate)}</span>
+                    ) : null}
+                    <span className="ml-auto">
+                      <Badge tone={a.status === "Admitted" ? "amber" : "green"}>{a.status}</Badge>
+                    </span>
+                  </li>
+                );
+              })}
+              {admissions.length > 6 ? (
+                <li className="text-xs text-muted-foreground">
+                  + {admissions.length - 6} earlier stay{admissions.length - 6 === 1 ? "" : "s"}
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Lab orders ({labOrderRows.length})
+            </h3>
+            <Link to="/lab-orders" className="text-xs font-medium text-accent underline">
+              Order queue →
+            </Link>
+          </div>
+          {labOrderRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No lab orders placed.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {labOrderRows.slice(0, 6).map((o) => (
+                <li key={o.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{fmtDate(o.date)}</span>
+                  <span className="max-w-48 truncate">{o.tests}</span>
+                  {o.priority === "Urgent" ? <Badge tone="red">Urgent</Badge> : null}
+                  <span className="ml-auto">
+                    <Badge tone={orderTone(o.status)}>{o.status}</Badge>
+                  </span>
+                </li>
+              ))}
+              {labOrderRows.length > 6 ? (
+                <li className="text-xs text-muted-foreground">+ {labOrderRows.length - 6} more</li>
+              ) : null}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Imaging orders ({imagingOrderRows.length})
+            </h3>
+            <Link to="/imaging-orders" className="text-xs font-medium text-accent underline">
+              Order queue →
+            </Link>
+          </div>
+          {imagingOrderRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No imaging ordered.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {imagingOrderRows.slice(0, 6).map((o) => (
+                <li key={o.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{fmtDate(o.date)}</span>
+                  <span className="max-w-48 truncate">{o.study}</span>
+                  {o.priority === "Urgent" ? <Badge tone="red">Urgent</Badge> : null}
+                  <span className="ml-auto">
+                    <Badge tone={orderTone(o.status)}>{o.status}</Badge>
+                  </span>
+                </li>
+              ))}
+              {imagingOrderRows.length > 6 ? (
+                <li className="text-xs text-muted-foreground">
+                  + {imagingOrderRows.length - 6} more
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Handover notes ({handoverRows.length})
+            </h3>
+            <Link to="/handover" className="text-xs font-medium text-accent underline">
+              Noticeboard →
+            </Link>
+          </div>
+          {handoverRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No shift notes pinned to this patient.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {handoverRows.slice(0, 6).map((n) => (
+                <li key={n.id}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {fmtDate(n.date)} {n.time}
+                    </span>
+                    <Badge tone={n.category === "Urgent" ? "red" : "neutral"}>{n.category}</Badge>
+                    {!n.resolved ? (
+                      <span className="ml-auto">
+                        <Badge tone="amber">Open</Badge>
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {n.text.length > 90 ? `${n.text.slice(0, 90)}…` : n.text}
+                    {n.author ? ` — ${n.author}` : ""}
+                  </p>
+                </li>
+              ))}
+              {handoverRows.length > 6 ? (
+                <li className="text-xs text-muted-foreground">+ {handoverRows.length - 6} more</li>
+              ) : null}
             </ul>
           )}
         </Card>

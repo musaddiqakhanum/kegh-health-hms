@@ -19,6 +19,17 @@ export function openNotes(state: HmsState): HandoverNote[] {
   return sortNotes(noteList(state).filter((n) => !n.resolved));
 }
 
+/**
+ * Notes pinned to one patient — open ones first, then the usual
+ * newest-first order. Feeds the Patient 360 handover card.
+ */
+export function notesForPatient(state: HmsState, patientId: string): HandoverNote[] {
+  const rows = noteList(state).filter((n) => n.patientId === patientId);
+  const open = sortNotes(rows.filter((n) => !n.resolved));
+  const handled = sortNotes(rows.filter((n) => n.resolved));
+  return [...open, ...handled];
+}
+
 export function searchNotes(
   rows: HandoverNote[],
   q: string,

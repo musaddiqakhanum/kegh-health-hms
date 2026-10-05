@@ -131,5 +131,33 @@ check(
 const noRate = { ...state, beds: { ...state.beds, b1: { ...state.beds.b1, rate: 0 } } };
 check("bedChargeFor null without a rate", ipd.bedChargeFor(noRate, noRate.admissions.a1) === null);
 
+/* per-patient stay history for Patient 360 */
+const withStay = {
+  ...state,
+  admissions: {
+    ...state.admissions,
+    a3: adm("a3", "p1", "b2", {
+      status: "Discharged",
+      admitDate: "2026-08-10",
+      dischargeDate: "2026-08-12",
+    }),
+  },
+};
+check(
+  "admissionsForPatient: open first, then newest",
+  ipd
+    .admissionsForPatient(withStay, "p1")
+    .map((a) => a.id)
+    .join(",") === "a1,a3",
+);
+check(
+  "admissionsForPatient: discharged patient still listed",
+  ipd.admissionsForPatient(state, "p2").map((a) => a.id).join(",") === "a2",
+);
+check(
+  "admissionsForPatient: unknown patient → empty",
+  ipd.admissionsForPatient(state, "p9").length === 0,
+);
+
 console.log(failures === 0 ? "\nAll IPD smoke tests passed." : `\n${failures} test(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -83,5 +83,27 @@ check(
 );
 check("search empty returns all", h.searchNotes(sorted, " ", () => "").length === 3);
 
+/* per-patient notes for the Patient 360 card */
+const perPatient = h.notesForPatient(
+  {
+    handoverNotes: {
+      x1: note("x1", { patientId: "p1", date: "2026-10-01", createdAt: 1 }),
+      x2: note("x2", { patientId: "p1", date: "2026-10-02", resolved: true, createdAt: 2 }),
+      x3: note("x3", { patientId: "p2", date: "2026-10-03", createdAt: 3 }),
+      x4: note("x4", { patientId: "p1", date: "2026-10-03", createdAt: 4 }),
+    },
+  },
+  "p1",
+);
+check(
+  "notesForPatient: open newest first, handled last",
+  perPatient.map((n) => n.id).join(",") === "x4,x1,x2",
+);
+check(
+  "notesForPatient: no other patient's notes",
+  !perPatient.some((n) => n.id === "x3") &&
+    h.notesForPatient({ handoverNotes: {} }, "p1").length === 0,
+);
+
 console.log(failures === 0 ? "\nAll handover smoke tests passed." : `\n${failures} test(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

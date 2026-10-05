@@ -66,6 +66,12 @@ function recordLabel(state: ReturnType<typeof useHms>["state"], a: AuditLog): st
         ? `${state.patients[lo.patientId]?.name ?? "—"} · ${lo.tests.split(",")[0]?.trim() ?? ""}`
         : "";
     }
+    case "imagingOrders": {
+      const io = byId(state.imagingOrders);
+      return io
+        ? `${state.patients[io.patientId]?.name ?? "—"} · ${io.study.split(",")[0]?.trim() ?? ""}`
+        : "";
+    }
     case "admissions": {
       const adm = byId(state.admissions);
       return adm ? `${state.patients[adm.patientId]?.name ?? "—"} · ${adm.status}` : "";
