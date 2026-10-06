@@ -100,6 +100,8 @@ export interface Admission {
   /** Treating doctor. */
   doctor: string;
   status: AdmissionStatus;
+  /** Planned discharge date set at admission — feeds the "Discharging today" strip. */
+  expectedDischarge?: string | undefined;
   /** Discharge block — filled by the discharge modal. */
   dischargeDate?: string | undefined;
   dischargeTime?: string | undefined;
@@ -173,6 +175,24 @@ export interface Visit {
   createdAt: number;
 }
 
+export type ServiceSection = "Lab" | "Imaging";
+
+export const SERVICE_SECTIONS: ServiceSection[] = ["Lab", "Imaging"];
+
+/** One priced investigation — the rate master behind one-click order billing. */
+export interface ServiceRate {
+  id: ID;
+  /** Which queue the rate belongs to. */
+  section: ServiceSection;
+  /** Test / study name, matched case-insensitively against order items. */
+  item: string;
+  /** Charge in ₹. */
+  rate: number;
+  /** Inactive rates are kept for history but no longer priced. */
+  active: boolean;
+  createdAt: number;
+}
+
 export type LabFlag = "normal" | "high" | "low" | "critical";
 
 /** Statuses a lab order moves through on its way to a result. */
@@ -228,6 +248,8 @@ export interface LabOrder {
   collectedBy?: string | undefined;
   /** Lab result entry fulfilling this order, when one was entered from it. */
   labResultId?: ID | undefined;
+  /** Bill the test charges were posted to — guards against double-posting. */
+  labChargeBillId?: ID | undefined;
   createdAt: number;
 }
 
@@ -276,6 +298,8 @@ export interface ImagingOrder {
   performedBy?: string | undefined;
   /** Radiology report fulfilling this order, when one was entered from it. */
   radId?: ID | undefined;
+  /** Bill the study charges were posted to — guards against double-posting. */
+  imagingChargeBillId?: ID | undefined;
   createdAt: number;
 }
 
@@ -718,6 +742,7 @@ export type Collection =
   | "labOrders"
   | "rads"
   | "imagingOrders"
+  | "serviceRates"
   | "pharms"
   | "meds"
   | "batches"
@@ -743,6 +768,7 @@ export const COLLECTIONS: Collection[] = [
   "labOrders",
   "rads",
   "imagingOrders",
+  "serviceRates",
   "pharms",
   "meds",
   "batches",
@@ -768,6 +794,7 @@ export interface HmsState {
   labOrders: Record<ID, LabOrder>;
   rads: Record<ID, Rad>;
   imagingOrders: Record<ID, ImagingOrder>;
+  serviceRates: Record<ID, ServiceRate>;
   pharms: Record<ID, Pharm>;
   meds: Record<ID, Med>;
   batches: Record<ID, StockBatch>;
@@ -867,6 +894,7 @@ export const emptyState = (): HmsState => ({
   labOrders: {},
   rads: {},
   imagingOrders: {},
+  serviceRates: {},
   pharms: {},
   meds: {},
   batches: {},
