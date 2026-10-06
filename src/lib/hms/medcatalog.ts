@@ -110,17 +110,33 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, "");
 
 /**
- * Seed the shared catalogue with the Indian starter list, but only while the
- * catalogue is completely empty (first run of the app). Ids are deterministic
- * per (name, form, strength), so two devices both seeding offline merge into
- * the same rows instead of duplicates.
+ * Seed the shared catalogue with the Indian starter list. Missing seed rows
+ * are MERGED in (never overwriting anything the hospital added) — deterministic
+ * ids per (name, form, strength) keep this idempotent and let two devices
+ * seeding offline merge into the same rows. Runs once per seed version per
+ * device (bump SEED_VERSION when the built-in list grows).
  */
+export const DRUG_SEED_VERSION = "2";
+const SEED_FLAG = "kegh-hms-drug-seed-version";
+
 export function seedIndianDrugs(state: HmsState): HmsState {
-  if (Object.keys(state.medCatalog ?? {}).length > 0) return state;
+  // No localStorage (tests / SSR): always evaluate the merge.
+  let ls: Storage | null = null;
+  try {
+    ls = typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    ls = null;
+  }
+  if (ls?.getItem(SEED_FLAG) === DRUG_SEED_VERSION) return state;
   const medCatalog: Record<string, MedCatalogItem> = { ...state.medCatalog };
+  let changed = false;
   for (const d of INDIAN_DRUGS) {
     const id = `seed-med-${slug(`${d.name}|${d.form}|${d.strength}`)}`;
-    medCatalog[id] = { id, name: d.name, form: d.form, strength: d.strength, createdAt: 0 };
+    if (!medCatalog[id]) {
+      medCatalog[id] = { id, name: d.name, form: d.form, strength: d.strength, createdAt: 0 };
+      changed = true;
+    }
   }
-  return { ...state, medCatalog };
+  ls?.setItem(SEED_FLAG, DRUG_SEED_VERSION);
+  return changed ? { ...state, medCatalog } : state;
 }

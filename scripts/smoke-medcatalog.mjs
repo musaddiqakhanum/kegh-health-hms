@@ -137,8 +137,21 @@ check(
   Object.keys(seeded.medCatalog).length === INDIAN_DRUGS.length,
 );
 check(
-  "seed: never re-seeds a non-empty catalogue (identity check)",
-  mc.seedIndianDrugs(seeded) === seeded && mc.seedIndianDrugs(state) === state,
+  "seed: fully seeded catalogue is stable (identity check)",
+  mc.seedIndianDrugs(seeded) === seeded,
+);
+const toppedUp = mc.seedIndianDrugs(state);
+check(
+  "seed: top-up merges missing rows without touching existing ones",
+  // fixture rows use synthetic ids, so every deterministic seed id is new here;
+  // real devices already seeded with seed ids keep them (no duplicates).
+  Object.keys(toppedUp.medCatalog).length === Object.keys(state.medCatalog).length + INDIAN_DRUGS.length &&
+    toppedUp.medCatalog.a1.name === "Augmentin Duo" &&
+    mc.catalogKey(
+      toppedUp.medCatalog.a5.name,
+      toppedUp.medCatalog.a5.form,
+      toppedUp.medCatalog.a5.strength,
+    ) === mc.catalogKey("Dolo 650", "Tablet", "650 mg"),
 );
 const seededTwice = mc.seedIndianDrugs({ medCatalog: {} });
 check(

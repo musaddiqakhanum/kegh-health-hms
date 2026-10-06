@@ -65,3 +65,6 @@
       illustrated picture tiles, A–Z letter navigation, search and form
       filters; the same picker opens from the doctor's prescription row and
       from the pharmacist's Add Medicine (add stock) dialog
+- [x] Drug seed is versioned and merges missing entries — existing devices
+      top up from 70 to 305 rows automatically on next load, nothing they
+      added is ever overwritten
