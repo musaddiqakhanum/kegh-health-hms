@@ -58,3 +58,6 @@
 - [x] Shared medicine catalogue — CSV/paste import + quick add on the Pharmacy
       page; prescription & stock name fields autocomplete from it; doctor gets
       form chips (Syrup / Drops / Injection / Suspension…) when names collide
+- [x] Indian medicine starter list — ~70 common brands auto-loaded into the
+      shared catalogue on first run (deterministic ids, so offline devices
+      merge without duplicates); top-ups still possible via CSV import

@@ -1824,7 +1824,8 @@ function CatalogImportModal({ open, onClose }: { open: boolean; onClose: () => v
     <Modal open={open} title="Medicine catalogue — import & add" onClose={onClose} wide>
       <p className="mb-3 text-sm text-muted-foreground">
         One shared list for everyone: the doctor's prescription autocomplete and the pharmacist's
-        stock screens both read this catalogue. Paste rows as{" "}
+        stock screens both read this catalogue. ~70 common Indian medicines (Dolo, Augmentin,
+        Azithral, Pan 40, Emeset…) come pre-loaded on first run. Paste rows as{" "}
         <code className="rounded bg-muted px-1">name, form, strength</code> — one medicine per line
         (strength optional). Duplicates are skipped automatically.
       </p>

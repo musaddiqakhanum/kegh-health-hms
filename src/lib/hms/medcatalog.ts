@@ -1,3 +1,4 @@
+import { INDIAN_DRUGS } from "./indian-drugs";
 import { MED_CATEGORIES, type HmsState, type MedCatalogItem } from "./types";
 
 export function catalogList(state: HmsState): MedCatalogItem[] {
@@ -98,4 +99,28 @@ export function newCatalogRows(
     fresh.push(i);
   }
   return { fresh, skipped };
+}
+
+/* ---------------------------------------------------------- Indian starter list */
+
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+/**
+ * Seed the shared catalogue with the Indian starter list, but only while the
+ * catalogue is completely empty (first run of the app). Ids are deterministic
+ * per (name, form, strength), so two devices both seeding offline merge into
+ * the same rows instead of duplicates.
+ */
+export function seedIndianDrugs(state: HmsState): HmsState {
+  if (Object.keys(state.medCatalog ?? {}).length > 0) return state;
+  const medCatalog: Record<string, MedCatalogItem> = { ...state.medCatalog };
+  for (const d of INDIAN_DRUGS) {
+    const id = `seed-med-${slug(`${d.name}|${d.form}|${d.strength}`)}`;
+    medCatalog[id] = { id, name: d.name, form: d.form, strength: d.strength, createdAt: 0 };
+  }
+  return { ...state, medCatalog };
 }

@@ -30,6 +30,8 @@ writeFileSync(join(dir, "package.json"), '{"type":"commonjs"}');
 const { createRequire } = await import("node:module");
 const require = createRequire(pathToFileURL(join(dir, "index.js")).href);
 const mc = require(join(dir, "lib/hms/medcatalog.js"));
+const types = require(join(dir, "lib/hms/types.js"));
+const { INDIAN_DRUGS } = require(join(dir, "lib/hms/indian-drugs.js"));
 rmSync(dir, { recursive: true, force: true });
 
 let failures = 0;
@@ -117,6 +119,43 @@ check(
   "newCatalogRows: existing + in-file dupes skipped, novel kept",
   dedupe.skipped === 3 && dedupe.fresh.length === 1 && dedupe.fresh[0].name === "Crocin",
 );
+
+/* ---- Indian starter list ---- */
+check(
+  "Indian list: every form is a canonical MED_CATEGORIES entry",
+  INDIAN_DRUGS.every((d) => types.MED_CATEGORIES.includes(d.form)),
+);
+check(
+  "Indian list: no duplicate name/form/strength keys",
+  new Set(INDIAN_DRUGS.map((d) => mc.catalogKey(d.name, d.form, d.strength))).size ===
+    INDIAN_DRUGS.length,
+);
+
+const seeded = mc.seedIndianDrugs({ medCatalog: {} });
+check(
+  "seed: every Indian row lands in an empty catalogue",
+  Object.keys(seeded.medCatalog).length === INDIAN_DRUGS.length,
+);
+check(
+  "seed: never re-seeds a non-empty catalogue (identity check)",
+  mc.seedIndianDrugs(seeded) === seeded && mc.seedIndianDrugs(state) === state,
+);
+const seededTwice = mc.seedIndianDrugs({ medCatalog: {} });
+check(
+  "seed: deterministic ids (two offline devices merge to the same rows)",
+  JSON.stringify(Object.keys(seeded.medCatalog).sort()) ===
+    JSON.stringify(Object.keys(seededTwice.medCatalog).sort()),
+);
+check(
+  "seed: Augmentin offers all 4 forms on screen, form-sorted",
+  mc.formsForName(seeded, "Augmentin").map((i) => i.form).join(",") ===
+    "Injection,Suspension,Syrup,Tablet",
+);
+check(
+  "seed: strength choice too — Wysolone 5 mg vs 10 mg",
+  mc.formsForName(seeded, "WySoLoNe").map((i) => i.strength).join(",") === "10 mg,5 mg",
+);
+check("seed: suggestions cover doctor+pharmacist typing", mc.suggestNames(seeded, "azi").join(",") === "Azithral");
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);
