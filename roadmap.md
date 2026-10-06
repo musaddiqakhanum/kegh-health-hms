@@ -47,3 +47,5 @@
 - [x] Force sign-out — Admin stamps an account in Settings and every device
       session for it ends at the next sync; idle auto-lock per device
       (Off/5/10/15/30/60 min) with audit entries for both
+- [x] Service rate master (lab & imaging) in Settings + one-click ₹ posting
+      from completed orders to the patient's bill (never duplicated)

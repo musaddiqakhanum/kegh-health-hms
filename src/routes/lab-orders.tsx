@@ -1,21 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ClipboardCheck, Download, Pencil, Plus, Printer, TestTube2, Trash2 } from "lucide-react";
+import {
+  ClipboardCheck,
+  Download,
+  IndianRupee,
+  Pencil,
+  Plus,
+  Printer,
+  TestTube2,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
 import { sortByDateDesc } from "@/lib/hms/selectors";
-import { fmtDate, todayISO } from "@/lib/hms/format";
+import { fmtDate, money, todayISO } from "@/lib/hms/format";
 import { downloadCsv } from "@/lib/hms/csv";
 import {
   COMMON_LAB_TESTS,
   LAB_ORDER_PRIORITIES,
   LAB_ORDER_STATUSES,
+  type Bill,
   type Lab,
   type LabOrder,
   type LabOrderStatus,
 } from "@/lib/hms/types";
 import { nextAction, orderQueueStats, searchOrders, sortOrders } from "@/lib/hms/laborders";
+import { orderCharge } from "@/lib/hms/charges";
 import {
   Badge,
   Button,
@@ -148,6 +159,61 @@ function LabOrdersPage() {
   const setStatusOf = (o: LabOrder, s: LabOrderStatus) => {
     upsert<LabOrder>("labOrders", { id: o.id, status: s });
     toast.success(`Order → ${s}`);
+  };
+
+  /** Post the order's tests to the patient's bill — new bill the first time,
+      the same line refreshed afterwards (never duplicated). */
+  const postLabCharges = (o: LabOrder) => {
+    const charge = orderCharge(state, "Lab", o.tests);
+    if (!charge) {
+      toast.error("No priced rates matched — set test rates in Settings → Service rates");
+      return;
+    }
+    if (charge.missing.length > 0) {
+      toast.error(
+        `No rate for: ${charge.missing.join(", ")} — add it under Settings → Service rates`,
+      );
+      return;
+    }
+    const line = {
+      description: charge.description,
+      qty: 1,
+      rate: charge.amount,
+      amount: charge.amount,
+    };
+    if (o.labChargeBillId && state.bills[o.labChargeBillId]) {
+      const bill = state.bills[o.labChargeBillId]!;
+      const items = [
+        line,
+        ...bill.items.filter((i) => !i.description.startsWith("Lab charges — ")),
+      ];
+      const subtotal = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+      const totalAmount = subtotal - Number(bill.discount || 0) + Number(bill.tax || 0);
+      upsert<Bill>("bills", {
+        id: bill.id,
+        items,
+        totalAmount,
+        due: Math.max(0, totalAmount - Number(bill.paid || 0)),
+      } as Bill);
+      toast.success(`Lab charges updated on the existing bill — ${money(totalAmount)}`);
+    } else {
+      const billId = crypto.randomUUID();
+      upsert<Bill>("bills", {
+        id: billId,
+        patientId: o.patientId,
+        visitId: o.visitId || "",
+        date: todayISO(),
+        items: [line],
+        totalAmount: charge.amount,
+        discount: 0,
+        tax: 0,
+        paid: 0,
+        due: charge.amount,
+        paymentMode: "Cash",
+      } as Bill);
+      upsert<LabOrder>("labOrders", { id: o.id, labChargeBillId: billId });
+      toast.success(`Lab charges posted to a new bill — ${money(charge.amount)}`);
+    }
   };
 
   const del = (o: LabOrder) => {
@@ -306,6 +372,18 @@ function LabOrdersPage() {
                   </Badge>
                 ) : o.status === "Result ready" ? (
                   <Badge tone="green">Ready</Badge>
+                ) : null}
+                {o.status === "Result ready" ? (
+                  <>
+                    <button
+                      title="Post test charges to the patient's bill"
+                      className="ml-1 align-middle text-muted-foreground hover:text-foreground"
+                      onClick={() => postLabCharges(o)}
+                    >
+                      <IndianRupee className="h-4 w-4" />
+                    </button>
+                    {o.labChargeBillId ? <Badge tone="neutral">billed</Badge> : null}
+                  </>
                 ) : null}
               </Td>
               <Td className="whitespace-nowrap">

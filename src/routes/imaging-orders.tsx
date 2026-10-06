@@ -1,15 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ClipboardCheck, Download, Pencil, Plus, Printer, Scan, Trash2 } from "lucide-react";
+import {
+  ClipboardCheck,
+  Download,
+  IndianRupee,
+  Pencil,
+  Plus,
+  Printer,
+  Scan,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
-import { fmtDate, todayISO } from "@/lib/hms/format";
+import { fmtDate, money, todayISO } from "@/lib/hms/format";
 import { downloadCsv } from "@/lib/hms/csv";
 import {
   COMMON_IMAGING_STUDIES,
   IMAGING_ORDER_STATUSES,
   LAB_ORDER_PRIORITIES,
+  type Bill,
   type ImagingOrder,
   type ImagingOrderStatus,
   type Rad,
@@ -20,6 +30,7 @@ import {
   searchImagingOrders,
   sortImagingOrders,
 } from "@/lib/hms/imaging";
+import { orderCharge } from "@/lib/hms/charges";
 import {
   Badge,
   Button,
@@ -147,6 +158,61 @@ function ImagingOrdersPage() {
   const setStatusOf = (o: ImagingOrder, s: ImagingOrderStatus) => {
     upsert<ImagingOrder>("imagingOrders", { id: o.id, status: s });
     toast.success(`Order → ${s}`);
+  };
+
+  /** Post the order's studies to the patient's bill — new bill the first time,
+      the same line refreshed afterwards (never duplicated). */
+  const postImagingCharges = (o: ImagingOrder) => {
+    const charge = orderCharge(state, "Imaging", o.study);
+    if (!charge) {
+      toast.error("No priced rates matched — set study rates in Settings → Service rates");
+      return;
+    }
+    if (charge.missing.length > 0) {
+      toast.error(
+        `No rate for: ${charge.missing.join(", ")} — add it under Settings → Service rates`,
+      );
+      return;
+    }
+    const line = {
+      description: charge.description,
+      qty: 1,
+      rate: charge.amount,
+      amount: charge.amount,
+    };
+    if (o.imagingChargeBillId && state.bills[o.imagingChargeBillId]) {
+      const bill = state.bills[o.imagingChargeBillId]!;
+      const items = [
+        line,
+        ...bill.items.filter((i) => !i.description.startsWith("Imaging charges — ")),
+      ];
+      const subtotal = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+      const totalAmount = subtotal - Number(bill.discount || 0) + Number(bill.tax || 0);
+      upsert<Bill>("bills", {
+        id: bill.id,
+        items,
+        totalAmount,
+        due: Math.max(0, totalAmount - Number(bill.paid || 0)),
+      } as Bill);
+      toast.success(`Imaging charges updated on the existing bill — ${money(totalAmount)}`);
+    } else {
+      const billId = crypto.randomUUID();
+      upsert<Bill>("bills", {
+        id: billId,
+        patientId: o.patientId,
+        visitId: o.visitId || "",
+        date: todayISO(),
+        items: [line],
+        totalAmount: charge.amount,
+        discount: 0,
+        tax: 0,
+        paid: 0,
+        due: charge.amount,
+        paymentMode: "Cash",
+      } as Bill);
+      upsert<ImagingOrder>("imagingOrders", { id: o.id, imagingChargeBillId: billId });
+      toast.success(`Imaging charges posted to a new bill — ${money(charge.amount)}`);
+    }
   };
 
   const del = (o: ImagingOrder) => {
@@ -293,6 +359,18 @@ function ImagingOrdersPage() {
                   <Badge tone="green">
                     {rad?.radiologist ? `Ready — ${rad.radiologist}` : "Ready"}
                   </Badge>
+                ) : null}
+                {o.status === "Report ready" ? (
+                  <>
+                    <button
+                      title="Post study charges to the patient's bill"
+                      className="ml-1 align-middle text-muted-foreground hover:text-foreground"
+                      onClick={() => postImagingCharges(o)}
+                    >
+                      <IndianRupee className="h-4 w-4" />
+                    </button>
+                    {o.imagingChargeBillId ? <Badge tone="neutral">billed</Badge> : null}
+                  </>
                 ) : null}
               </Td>
               <Td className="whitespace-nowrap">

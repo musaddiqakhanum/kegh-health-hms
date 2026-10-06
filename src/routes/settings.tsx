@@ -8,9 +8,20 @@ import { packState, unpackState } from "@/lib/hms/pack";
 import { getPassphrase, setPassphrase } from "@/lib/hms/sync";
 import { hashPassword, newSaltHex } from "@/lib/hms/crypto";
 import { activeUsers, findUserByUsername, staffNameFor, userList } from "@/lib/hms/selectors";
+import { serviceRateList } from "@/lib/hms/charges";
 import { downloadBlob } from "@/lib/hms/csv";
+import { money } from "@/lib/hms/format";
 import { abdmStatus } from "@/lib/abdm/abdm.functions";
-import type { AuditLog, Role, User } from "@/lib/hms/types";
+import {
+  COMMON_IMAGING_STUDIES,
+  COMMON_LAB_TESTS,
+  SERVICE_SECTIONS,
+  type AuditLog,
+  type Role,
+  type ServiceRate,
+  type ServiceSection,
+  type User,
+} from "@/lib/hms/types";
 import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/hms/ui";
 import { AdminOnly } from "@/components/hms/gate";
 
@@ -555,6 +566,14 @@ function SettingsPage() {
         </div>
       </AdminOnly>
 
+      <AdminOnly
+        page="Service rates"
+        subtitle="Price list for lab tests and imaging studies"
+        hint="The ₹ button on a completed lab / imaging order posts these rates to the patient's bill. Rates sync with the hospital data."
+      >
+        <ServiceRatesCard />
+      </AdminOnly>
+
       <Card className="space-y-4">
         <h2 className="font-semibold">Sync &amp; encryption</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -664,5 +683,117 @@ function SettingsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+/* ----------------------------------------------------------- service rates */
+
+function ServiceRatesCard() {
+  const { state, upsert } = useHms();
+  const [section, setSection] = useState<ServiceSection>("Lab");
+  const [item, setItem] = useState("");
+  const [rate, setRate] = useState("");
+
+  const rows = serviceRateList(state);
+  const suggestions = section === "Lab" ? COMMON_LAB_TESTS : COMMON_IMAGING_STUDIES;
+
+  const add = () => {
+    const name = item.trim();
+    const r = Number(rate);
+    if (!name) {
+      toast.error("Enter a test / study name");
+      return;
+    }
+    if (!Number.isFinite(r) || r <= 0) {
+      toast.error("Enter a rate above zero");
+      return;
+    }
+    const existing = rows.find(
+      (x) => x.section === section && x.item.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) {
+      upsert<ServiceRate>("serviceRates", { id: existing.id, rate: r, active: true });
+      toast.success(`Rate updated — ${name} ${money(r)}`);
+    } else {
+      upsert<ServiceRate>("serviceRates", { section, item: name, rate: r, active: true });
+      toast.success(`Rate added — ${name} ${money(r)}`);
+    }
+    setItem("");
+    setRate("");
+  };
+
+  const toggle = (x: ServiceRate) => {
+    upsert<ServiceRate>("serviceRates", { id: x.id, active: !x.active });
+    toast.success(x.active ? "Rate disabled" : "Rate enabled");
+  };
+
+  return (
+    <Card className="space-y-4">
+      <h2 className="font-semibold">Price list</h2>
+
+      <div className="grid items-end gap-4 sm:grid-cols-4">
+        <Field label="Section" required>
+          <Select value={section} onChange={(e) => setSection(e.target.value as ServiceSection)}>
+            {SERVICE_SECTIONS.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Test / study" required className="sm:col-span-2">
+          <Input
+            list="service-rate-items"
+            placeholder={
+              section === "Lab" ? "e.g. CBC, HbA1c…" : "e.g. USG Abdomen, X-Ray Chest PA…"
+            }
+            value={item}
+            onChange={(e) => setItem(e.target.value)}
+          />
+          <datalist id="service-rate-items">
+            {suggestions.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Rate (₹)" required>
+          <Input
+            type="number"
+            min={0}
+            placeholder="e.g. 450"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+          />
+        </Field>
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={add}>
+          <Plus className="h-4 w-4" /> Add / update rate
+        </Button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No rates yet — the ₹ button on completed lab / imaging orders stays inactive until the
+          price list has entries.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border rounded-md ring-1 ring-border/60">
+          {rows.map((x) => (
+            <li key={x.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+              <Badge tone={x.section === "Lab" ? "neutral" : "amber"}>{x.section}</Badge>
+              <span className="min-w-0 flex-1 font-medium text-foreground">{x.item}</span>
+              <span className="font-semibold">{money(x.rate)}</span>
+              <Badge tone={x.active ? "green" : "red"}>{x.active ? "Active" : "Disabled"}</Badge>
+              <Button variant="ghost" onClick={() => toggle(x)}>
+                {x.active ? "Disable" : "Enable"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Names match order items case-insensitively. Re-adding the same name updates its price; new
+        charges use the latest active rate, bills already posted are untouched.
+      </p>
+    </Card>
   );
 }

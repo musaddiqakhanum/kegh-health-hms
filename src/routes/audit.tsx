@@ -72,6 +72,10 @@ function recordLabel(state: ReturnType<typeof useHms>["state"], a: AuditLog): st
         ? `${state.patients[io.patientId]?.name ?? "—"} · ${io.study.split(",")[0]?.trim() ?? ""}`
         : "";
     }
+    case "serviceRates": {
+      const r = byId(state.serviceRates);
+      return r ? `${r.section} · ${r.item} · ₹${r.rate}` : "";
+    }
     case "admissions": {
       const adm = byId(state.admissions);
       return adm ? `${state.patients[adm.patientId]?.name ?? "—"} · ${adm.status}` : "";
