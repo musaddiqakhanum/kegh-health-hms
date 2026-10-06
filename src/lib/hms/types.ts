@@ -364,6 +364,7 @@ export const MED_CATEGORIES: string[] = [
   "Tablet",
   "Capsule",
   "Syrup",
+  "Suspension",
   "Injection",
   "Ointment / Cream",
   "Drops",
@@ -373,6 +374,22 @@ export const MED_CATEGORIES: string[] = [
   "Consumable",
   "Other",
 ];
+
+/**
+ * Central drug master — imported once (CSV), then it feeds the doctor's
+ * prescription autocomplete AND the pharmacist's stock screens, so the same
+ * "Augmentin 625 mg (Tablet)" spelling shows up everywhere.
+ */
+export interface MedCatalogItem {
+  id: ID;
+  /** Drug name as the doctor types it (brand or generic). */
+  name: string;
+  /** Dosage form — from MED_CATEGORIES, canonical casing on import. */
+  form: string;
+  /** Strength text, e.g. "250 mg/5 ml" (may be empty). */
+  strength: string;
+  createdAt: number;
+}
 
 /** Units stock is counted in — shown across inventory, GRN and dispense. */
 export const MED_UNITS: string[] = [
@@ -745,6 +762,7 @@ export type Collection =
   | "serviceRates"
   | "pharms"
   | "meds"
+  | "medCatalog"
   | "batches"
   | "grns"
   | "bills"
@@ -771,6 +789,7 @@ export const COLLECTIONS: Collection[] = [
   "serviceRates",
   "pharms",
   "meds",
+  "medCatalog",
   "batches",
   "grns",
   "bills",
@@ -797,6 +816,7 @@ export interface HmsState {
   serviceRates: Record<ID, ServiceRate>;
   pharms: Record<ID, Pharm>;
   meds: Record<ID, Med>;
+  medCatalog: Record<ID, MedCatalogItem>;
   batches: Record<ID, StockBatch>;
   grns: Record<ID, Grn>;
   bills: Record<ID, Bill>;
@@ -897,6 +917,7 @@ export const emptyState = (): HmsState => ({
   serviceRates: {},
   pharms: {},
   meds: {},
+  medCatalog: {},
   batches: {},
   grns: {},
   bills: {},

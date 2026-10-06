@@ -53,3 +53,8 @@
       sections with turnaround stats, print and CSV
 - [x] IPD expected-discharge date + "Discharging today" strip on the
       admissions tab with one-click discharge now
+- [x] Current patient everywhere — header chip plus every patient picker
+      pre-selecting the last chosen patient across screens
+- [x] Shared medicine catalogue — CSV/paste import + quick add on the Pharmacy
+      page; prescription & stock name fields autocomplete from it; doctor gets
+      form chips (Syrup / Drops / Injection / Suspension…) when names collide
