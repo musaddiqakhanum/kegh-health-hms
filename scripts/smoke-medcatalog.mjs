@@ -152,10 +152,36 @@ check(
     "Injection,Suspension,Syrup,Tablet",
 );
 check(
-  "seed: strength choice too — Wysolone 5 mg vs 10 mg",
-  mc.formsForName(seeded, "WySoLoNe").map((i) => i.strength).join(",") === "10 mg,5 mg",
+  "seed: strength choice too — Wysolone 5/10/20 mg",
+  mc.formsForName(seeded, "WySoLoNe").map((i) => i.strength).join(",") === "10 mg,20 mg,5 mg",
 );
 check("seed: suggestions cover doctor+pharmacist typing", mc.suggestNames(seeded, "azi").join(",") === "Azithral");
+check("seed: comprehensive Indian-market coverage (300+ entries)", INDIAN_DRUGS.length >= 300);
+check(
+  "seed: A–Z navigation has wide letter coverage (>= 20 letters)",
+  new Set(INDIAN_DRUGS.map((d) => d.name[0].toUpperCase())).size >= 20,
+);
+check(
+  "seed: multi-form showcases — Emeset 3, Calpol 3, Sinarest 3",
+  mc.formsForName(seeded, "Emeset").length === 3 &&
+    mc.formsForName(seeded, "Calpol").length === 3 &&
+    mc.formsForName(seeded, "Sinarest").length === 3,
+);
+check(
+  "seed: strength showcases — Thyronorm 4, Glycomet 3",
+  mc.formsForName(seeded, "Thyronorm").length === 4 &&
+    mc.formsForName(seeded, "Glycomet").length === 3,
+);
+check(
+  "seed: hospital injectables present",
+  mc.formsForName(seeded, "Adrenaline").length === 1 &&
+    mc.formsForName(seeded, "Monocef").length === 1 &&
+    mc.formsForName(seeded, "Metrogyl").some((i) => i.form === "Injection"),
+);
+check(
+  "seed: catalog list is alphabetically navigable (no null starts)",
+  mc.catalogList(seeded).every((i) => /^[A-Z0-9]/i.test(i.name[0] ?? "")),
+);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   Download,
   Package,
   PackagePlus,
@@ -46,7 +47,24 @@ import {
   suggestedRate,
 } from "@/lib/hms/inventory";
 import { newCatalogRows, parseCatalogCsv, suggestNames } from "@/lib/hms/medcatalog";
+import { MedicinePickerModal } from "@/components/hms/catalogue-browser";
 import { downloadCsv } from "@/lib/hms/csv";
+
+/** Stock unit that best matches a catalogue dosage form. */
+const DEFAULT_UNIT_FOR_FORM: Record<string, string> = {
+  Tablet: "tablet",
+  Capsule: "capsule",
+  Syrup: "bottle",
+  Suspension: "bottle",
+  Injection: "vial",
+  Drops: "bottle",
+  "Ointment / Cream": "tube",
+  Inhaler: "piece",
+  Sachet: "sachet",
+  Suppository: "piece",
+  Consumable: "box",
+  Other: "piece",
+};
 import {
   Badge,
   Button,
@@ -275,6 +293,7 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
   const [filter, setFilter] = useState<"all" | "out" | "low">("all");
   const [open, setOpen] = useState(false);
   const [medForm, setMedForm] = useState<Partial<Med>>(blankMed);
+  const [cataloguePick, setCataloguePick] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchForm, setBatchForm] = useState<Partial<StockBatch>>(blankBatch);
 
@@ -562,12 +581,23 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Medicine name" required>
-            <Input
-              placeholder="Dolo 650"
-              list="med-catalog-names"
-              value={medForm.name ?? ""}
-              onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))}
-            />
+            <div className="flex gap-1.5">
+              <Input
+                className="flex-1"
+                placeholder="Dolo 650"
+                list="med-catalog-names"
+                value={medForm.name ?? ""}
+                onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <button
+                type="button"
+                title="Browse the medicine library with pictures — fills category & unit too"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border transition-colors hover:bg-secondary hover:text-foreground"
+                onClick={() => setCataloguePick(true)}
+              >
+                <BookOpen className="h-4 w-4" />
+              </button>
+            </div>
             <datalist id="med-catalog-names">
               {suggestNames(state, medForm.name ?? "").map((n) => (
                 <option key={n} value={n} />
@@ -659,6 +689,23 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
           <Button onClick={saveMed}>Save medicine</Button>
         </div>
       </Modal>
+
+      <MedicinePickerModal
+        open={cataloguePick}
+        onClose={() => setCataloguePick(false)}
+        title="Medicine library — choose the medicine to stock"
+        pickLabel="Stock"
+        onPick={(item) => {
+          const unit = DEFAULT_UNIT_FOR_FORM[item.form] ?? "piece";
+          setMedForm((f) => ({
+            ...f,
+            name: item.name,
+            genericName: f.genericName || item.strength || "",
+            category: item.form || "",
+            unit,
+          }));
+        }}
+      />
 
       {/* quick add stock modal (shared shape with the Batches tab modal is intentional:
           quantities here create a brand-new batch) */}
@@ -1824,8 +1871,9 @@ function CatalogImportModal({ open, onClose }: { open: boolean; onClose: () => v
     <Modal open={open} title="Medicine catalogue — import & add" onClose={onClose} wide>
       <p className="mb-3 text-sm text-muted-foreground">
         One shared list for everyone: the doctor's prescription autocomplete and the pharmacist's
-        stock screens both read this catalogue. ~70 common Indian medicines (Dolo, Augmentin,
-        Azithral, Pan 40, Emeset…) come pre-loaded on first run. Paste rows as{" "}
+        stock screens both read this catalogue. 300+ Indian-market medicines come pre-loaded on
+        first run — browse them from the Medicine Library page or the little book icon next to any
+        medicine name box. Paste rows as{" "}
         <code className="rounded bg-muted px-1">name, form, strength</code> — one medicine per line
         (strength optional). Duplicates are skipped automatically.
       </p>

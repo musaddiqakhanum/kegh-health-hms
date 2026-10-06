@@ -61,3 +61,7 @@
 - [x] Indian medicine starter list — ~70 common brands auto-loaded into the
       shared catalogue on first run (deterministic ids, so offline devices
       merge without duplicates); top-ups still possible via CSV import
+- [x] Medicine Library page — 300+ Indian-market medicine entries with
+      illustrated picture tiles, A–Z letter navigation, search and form
+      filters; the same picker opens from the doctor's prescription row and
+      from the pharmacist's Add Medicine (add stock) dialog

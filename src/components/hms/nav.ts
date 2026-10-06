@@ -2,6 +2,7 @@ import {
   BarChart3,
   Banknote,
   BedDouble,
+  BookOpen,
   CalendarDays,
   ClipboardCheck,
   Cloud,
@@ -47,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/radiology", label: "Radiology", icon: Scan, key: "rads" },
   { to: "/imaging-orders", label: "Imaging Orders", icon: ClipboardCheck, key: "imagingOrders" },
   { to: "/pharmacy", label: "Pharmacy", icon: Pill, key: "pharms" },
+  { to: "/medicines", label: "Medicine Library", icon: BookOpen, key: "medicines" },
   { to: "/billing", label: "Billing", icon: IndianRupee, key: "billing" },
   { to: "/staff", label: "Staff Records", icon: UsersRound, key: "staff" },
   { to: "/payroll", label: "Payroll", icon: Banknote, key: "payroll" },
@@ -91,6 +93,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "rads",
     "imagingOrders",
     "pharms",
+    "medicines",
     "settings",
   ],
   Lab: [
@@ -105,7 +108,16 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "reports",
     "settings",
   ],
-  Pharmacy: ["workspace", "handover", "dash", "patients", "pharms", "reports", "settings"],
+  Pharmacy: [
+    "workspace",
+    "handover",
+    "dash",
+    "patients",
+    "pharms",
+    "medicines",
+    "reports",
+    "settings",
+  ],
   Billing: ["workspace", "handover", "dash", "patients", "billing", "reports", "settings"],
 };
 
