@@ -44,3 +44,6 @@
       impression, urgent flag, requisition slip print, diagnostics workspace
 - [x] Patient 360 cards — IPD admissions, lab orders, imaging orders and
       handover notes for the patient, all linked into the queues
+- [x] Force sign-out — Admin stamps an account in Settings and every device
+      session for it ends at the next sync; idle auto-lock per device
+      (Off/5/10/15/30/60 min) with audit entries for both

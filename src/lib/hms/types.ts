@@ -809,6 +809,11 @@ export interface User {
   salt: string;
   /** Inactive accounts are listed but cannot sign in. */
   active: boolean;
+  /**
+   * Force sign-out stamp: any device session for this account that began
+   * BEFORE this time is dropped the moment the stamp arrives with a sync.
+   */
+  sessionsKickedAt?: number | undefined;
   createdAt: number;
 }
 
@@ -828,6 +833,11 @@ export interface Settings {
    * today's behaviour: free role choice plus the optional device PIN.
    */
   requireLogin: boolean;
+  /**
+   * Idle auto-lock per device, in minutes (0 = off): a signed-in session is
+   * dropped after this long without keyboard / pointer activity.
+   */
+  idleLockMinutes: number;
   /** doctors available for selection across the app */
   doctors: string[];
   pin: string;
@@ -884,6 +894,7 @@ export const defaultSettings = (): Settings => ({
   deviceId: "",
   role: "Admin",
   requireLogin: false,
+  idleLockMinutes: 0,
   doctors: [],
   pin: "",
   autoSync: true,
