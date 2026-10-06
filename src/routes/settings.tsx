@@ -366,6 +366,26 @@ function SettingsPage() {
                   <option value="off">Off</option>
                 </Select>
               </Field>
+              <Field label="Auto-lock when idle (this device)">
+                <Select
+                  value={String(settings.idleLockMinutes ?? 0)}
+                  disabled={!settings.requireLogin}
+                  onChange={(e) => {
+                    const mins = Number(e.target.value);
+                    updateSettings({ idleLockMinutes: mins });
+                    toast.success(
+                      mins === 0 ? "Idle auto-lock off" : `Auto-locks after ${mins} min idle`,
+                    );
+                  }}
+                >
+                  <option value="0">Off</option>
+                  <option value="5">5 minutes</option>
+                  <option value="10">10 minutes</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="60">60 minutes</option>
+                </Select>
+              </Field>
             </div>
             <p className="text-xs text-muted-foreground">
               When on and at least one active account exists, the app stays behind the sign-in
@@ -404,6 +424,22 @@ function SettingsPage() {
                       }}
                     >
                       Reset password
+                    </Button>
+                    <Button
+                      variant="outline"
+                      title="Ends every signed-in session for this account on all devices at the next sync"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Sign ${u.displayName} out on ALL devices? Their sessions end as soon as each device next syncs.`,
+                          )
+                        ) {
+                          upsert<User>("users", { id: u.id, sessionsKickedAt: Date.now() });
+                          toast.success(`Sessions for ${u.displayName} end at the next sync`);
+                        }
+                      }}
+                    >
+                      Sign out devices
                     </Button>
                     <Button variant="outline" onClick={() => toggleActive(u)}>
                       {u.active ? "Disable" : "Enable"}
