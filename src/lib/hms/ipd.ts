@@ -43,6 +43,11 @@ export function activeAdmissions(state: HmsState): Admission[] {
     );
 }
 
+/** Admitted patients whose expected discharge date is `date` (default: today). */
+export function dueTodayDischarges(state: HmsState, date = todayISO()): Admission[] {
+  return activeAdmissions(state).filter((a) => (a.expectedDischarge ?? "") === date);
+}
+
 /**
  * Every stay a patient has had — open admission first, then most recent
  * admit date. The Patient 360 admissions card shows this list.

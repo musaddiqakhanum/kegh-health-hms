@@ -100,6 +100,8 @@ export interface Admission {
   /** Treating doctor. */
   doctor: string;
   status: AdmissionStatus;
+  /** Planned discharge date set at admission — feeds the "Discharging today" strip. */
+  expectedDischarge?: string | undefined;
   /** Discharge block — filled by the discharge modal. */
   dischargeDate?: string | undefined;
   dischargeTime?: string | undefined;

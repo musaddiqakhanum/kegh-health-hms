@@ -159,5 +159,39 @@ check(
   ipd.admissionsForPatient(state, "p9").length === 0,
 );
 
+/* expected-discharge "due today" strip */
+const tdy = new Date();
+const tdyISO = `${tdy.getFullYear()}-${String(tdy.getMonth() + 1).padStart(2, "0")}-${String(
+  tdy.getDate(),
+).padStart(2, "0")}`;
+const dueState = {
+  ...state,
+  admissions: {
+    ...state.admissions,
+    a5: adm("a5", "p3", "b2", { expectedDischarge: tdyISO }),
+    a6: adm("a6", "p4", "b3", { expectedDischarge: "2026-12-31" }),
+    a7: adm("a7", "p5", "b1", {
+      status: "Discharged",
+      expectedDischarge: tdyISO,
+      dischargeDate: tdyISO,
+    }),
+  },
+};
+check(
+  "dueTodayDischarges: admitted + expected today only",
+  ipd
+    .dueTodayDischarges(dueState)
+    .map((a) => a.id)
+    .join(",") === "a5",
+);
+check(
+  "dueTodayDischarges: explicit date works",
+  ipd.dueTodayDischarges(dueState, "2026-12-31").map((a) => a.id).join(",") === "a6",
+);
+check(
+  "dueTodayDischarges: quiet day → empty",
+  ipd.dueTodayDischarges(dueState, "2030-01-01").length === 0,
+);
+
 console.log(failures === 0 ? "\nAll IPD smoke tests passed." : `\n${failures} test(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

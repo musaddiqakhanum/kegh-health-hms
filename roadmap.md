@@ -51,3 +51,5 @@
       from completed orders to the patient's bill (never duplicated)
 - [x] Reports: Admissions (IPD) census plus lab & imaging order-queue
       sections with turnaround stats, print and CSV
+- [x] IPD expected-discharge date + "Discharging today" strip on the
+      admissions tab with one-click discharge now

@@ -25,6 +25,7 @@ import {
   bedChargeFor,
   bedList,
   bedStats,
+  dueTodayDischarges,
   freeBeds,
   stayDays,
   wardOccupancy,
@@ -211,6 +212,7 @@ const blankAdmit = (): Partial<Admission> => ({
   reason: "",
   doctor: "",
   status: "Admitted",
+  expectedDischarge: "",
 });
 
 function AdmissionsTab() {
@@ -243,6 +245,7 @@ function AdmissionsTab() {
   }, [state, q, show]);
 
   const beds = freeBeds(state);
+  const dueToday = useMemo(() => dueTodayDischarges(state), [state]);
 
   const saveAdmit = () => {
     if (!form.patientId) {
@@ -389,6 +392,42 @@ function AdmissionsTab() {
         </div>
       </div>
 
+      {dueToday.length > 0 ? (
+        <Card className="border-l-4 border-l-amber-400 bg-amber-50 p-3 dark:bg-amber-950/30">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+            Discharging today ({dueToday.length}) — beds to free
+          </p>
+          <ul className="space-y-1 text-sm">
+            {dueToday.map((a) => {
+              const p = state.patients[a.patientId];
+              const b = state.beds[a.bedId];
+              return (
+                <li key={a.id} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to="/patients/$patientId"
+                    params={{ patientId: a.patientId }}
+                    className="font-medium text-accent underline"
+                  >
+                    {p?.name ?? "—"}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {b ? `${b.ward} · ${b.label}` : "—"} · day {stayDays(a.admitDate)}
+                    {a.doctor ? ` · ${a.doctor}` : ""}
+                  </span>
+                  <Badge tone="amber">Due today</Badge>
+                  <button
+                    className="ml-auto text-xs font-medium text-accent underline"
+                    onClick={() => setDischargeFor(a)}
+                  >
+                    Discharge now →
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      ) : null}
+
       <DataTable
         columns={["Patient", "Bed", "Admitted", "Days", "Doctor", "Reason", "Status", ""]}
         rowCount={rows.length}
@@ -433,6 +472,11 @@ function AdmissionsTab() {
                     Discharged {a.dischargeDate ? fmtDate(a.dischargeDate) : ""}
                   </Badge>
                 )}
+                {a.status === "Admitted" && (a.expectedDischarge ?? "") === todayISO() ? (
+                  <div className="mt-1">
+                    <Badge tone="red">due today</Badge>
+                  </div>
+                ) : null}
                 {a.bedChargeBillId ? (
                   <div className="mt-1">
                     <Badge tone="neutral">bed billed</Badge>
@@ -535,6 +579,14 @@ function AdmissionsTab() {
               type="time"
               value={form.admitTime ?? ""}
               onChange={(e) => setForm((f) => ({ ...f, admitTime: e.target.value }))}
+            />
+          </Field>
+          <Field label="Expected discharge (optional)">
+            <Input
+              type="date"
+              min={form.admitDate || undefined}
+              value={form.expectedDischarge ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, expectedDischarge: e.target.value }))}
             />
           </Field>
           <Field label="Treating doctor" className="sm:col-span-2">
