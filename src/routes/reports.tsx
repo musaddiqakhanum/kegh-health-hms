@@ -17,7 +17,8 @@ import {
   topMedicines,
   type RangeKey,
 } from "@/lib/hms/selectors";
-import { fmtDate, money } from "@/lib/hms/format";
+import { fmtDate, money, todayISO } from "@/lib/hms/format";
+import { stayDays } from "@/lib/hms/ipd";
 import { currentPeriod, shortPeriodLabel } from "@/lib/hms/payroll";
 import { downloadCsv } from "@/lib/hms/csv";
 import { Badge, Button, Card, Field, PageHeader, Select } from "@/components/hms/ui";
@@ -42,7 +43,16 @@ export const Route = createFileRoute("/reports")({
   component: ReportsPage,
 });
 
-type Section = "labs" | "bills" | "pharms" | "rads" | "appointments" | "prescriptions";
+type Section =
+  | "labs"
+  | "bills"
+  | "pharms"
+  | "rads"
+  | "appointments"
+  | "prescriptions"
+  | "admissions"
+  | "labOrders"
+  | "imagingOrders";
 const SECTION_LABELS: Record<Section, string> = {
   labs: "Laboratory",
   bills: "Billing",
@@ -50,6 +60,9 @@ const SECTION_LABELS: Record<Section, string> = {
   rads: "Radiology",
   appointments: "Appointments",
   prescriptions: "Prescriptions",
+  admissions: "Admissions (IPD)",
+  labOrders: "Lab orders",
+  imagingOrders: "Imaging orders",
 };
 
 function ReportsPage() {
@@ -76,7 +89,14 @@ function ReportsPage() {
 
   const rows = useMemo(() => {
     const list = Object.values(state[section] as Record<string, { date: string }>);
-    return list.filter((r) => inRange(r.date, range));
+    return list.filter((r) =>
+      inRange(
+        section === "admissions"
+          ? ((r as unknown as (typeof state.admissions)[string]).admitDate ?? "")
+          : r.date,
+        range,
+      ),
+    );
   }, [state, section, range]);
 
   const sectionTable = useMemo(() => {
@@ -180,6 +200,91 @@ function ReportsPage() {
           ["Medicines prescribed", String(medicines)],
           ["Distinct medicines", String(distinct.size)],
           ["Patients covered", String(new Set(r.map((x) => x.patientId)).size)],
+        ],
+      };
+    }
+    if (section === "admissions") {
+      const r = rows as unknown as (typeof state.admissions)[string][];
+      const bedLabel = (x: (typeof r)[number]) => {
+        const b = state.beds[x.bedId];
+        return b ? `${b.ward} · ${b.label}` : "—";
+      };
+      const open = r.filter((x) => x.status === "Admitted");
+      const days = r.map((x) => stayDays(x.admitDate, x.dischargeDate ?? todayISO()));
+      return {
+        head: ["Admit date", "Patient", "Ward · Bed", "Days", "Status", "Discharged"],
+        body: r.map((x) => [
+          fmtDate(x.admitDate),
+          name(x.patientId),
+          bedLabel(x),
+          String(stayDays(x.admitDate, x.dischargeDate ?? todayISO())),
+          x.status,
+          x.dischargeDate ? fmtDate(x.dischargeDate) : "—",
+        ]),
+        summary: [
+          ["Admissions", String(r.length)],
+          ["Still admitted", String(open.length)],
+          ["Discharged", String(r.length - open.length)],
+          [
+            "Avg stay (days)",
+            days.length ? (days.reduce((s, d) => s + d, 0) / days.length).toFixed(1) : "0",
+          ],
+        ],
+      };
+    }
+    if (section === "labOrders") {
+      const r = rows as unknown as (typeof state.labOrders)[string][];
+      const delays = r
+        .filter((x) => x.collectedDate)
+        .map((x) => stayDays(x.date, x.collectedDate!) - 1);
+      return {
+        head: ["Date", "Patient", "Tests", "Priority", "Status", "Ordered by"],
+        body: r.map((x) => [
+          fmtDate(x.date),
+          name(x.patientId),
+          x.tests,
+          x.priority,
+          x.status,
+          x.orderedBy || "—",
+        ]),
+        summary: [
+          ["Orders", String(r.length)],
+          ["Awaiting sample", String(r.filter((x) => x.status === "Ordered").length)],
+          ["Awaiting result", String(r.filter((x) => x.status === "Sample collected").length)],
+          ["Result ready", String(r.filter((x) => x.status === "Result ready").length)],
+          ["Urgent", String(r.filter((x) => x.priority === "Urgent").length)],
+          [
+            "Avg sample delay (days)",
+            delays.length ? (delays.reduce((s, d) => s + d, 0) / delays.length).toFixed(1) : "—",
+          ],
+        ],
+      };
+    }
+    if (section === "imagingOrders") {
+      const r = rows as unknown as (typeof state.imagingOrders)[string][];
+      const delays = r
+        .filter((x) => x.performedDate)
+        .map((x) => stayDays(x.date, x.performedDate!) - 1);
+      return {
+        head: ["Date", "Patient", "Study", "Priority", "Status", "Ordered by"],
+        body: r.map((x) => [
+          fmtDate(x.date),
+          name(x.patientId),
+          x.study,
+          x.priority,
+          x.status,
+          x.orderedBy || "—",
+        ]),
+        summary: [
+          ["Orders", String(r.length)],
+          ["Awaiting scan", String(r.filter((x) => x.status === "Ordered").length)],
+          ["Awaiting report", String(r.filter((x) => x.status === "Study done").length)],
+          ["Report ready", String(r.filter((x) => x.status === "Report ready").length)],
+          ["Urgent", String(r.filter((x) => x.priority === "Urgent").length)],
+          [
+            "Avg scan delay (days)",
+            delays.length ? (delays.reduce((s, d) => s + d, 0) / delays.length).toFixed(1) : "—",
+          ],
         ],
       };
     }

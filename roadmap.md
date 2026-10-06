@@ -49,3 +49,5 @@
       (Off/5/10/15/30/60 min) with audit entries for both
 - [x] Service rate master (lab & imaging) in Settings + one-click ₹ posting
       from completed orders to the patient's bill (never duplicated)
+- [x] Reports: Admissions (IPD) census plus lab & imaging order-queue
+      sections with turnaround stats, print and CSV
