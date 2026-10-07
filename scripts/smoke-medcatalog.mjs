@@ -56,16 +56,25 @@ const state = {
 
 check(
   "catalogList sorted by name then form",
-  mc.catalogList(state).map((i) => i.id).join(",") === "a1,a2,a4,a3,a5",
+  mc
+    .catalogList(state)
+    .map((i) => i.id)
+    .join(",") === "a1,a2,a4,a3,a5",
 );
 
 check(
   "formsForName: every variant, case-insensitive",
-  mc.formsForName(state, "augmentin duo").map((i) => i.id).join(",") === "a1,a2",
+  mc
+    .formsForName(state, "augmentin duo")
+    .map((i) => i.id)
+    .join(",") === "a1,a2",
 );
 check(
   "formsForName: drops & suspension both offered",
-  mc.formsForName(state, "Azithral").map((i) => i.form).join(",") === "Drops,Suspension",
+  mc
+    .formsForName(state, "Azithral")
+    .map((i) => i.form)
+    .join(",") === "Drops,Suspension",
 );
 check("formsForName: unknown name → empty", mc.formsForName(state, "Crocin").length === 0);
 check("formsForName: blank → empty", mc.formsForName(state, "  ").length === 0);
@@ -145,7 +154,8 @@ check(
   "seed: top-up merges missing rows without touching existing ones",
   // fixture rows use synthetic ids, so every deterministic seed id is new here;
   // real devices already seeded with seed ids keep them (no duplicates).
-  Object.keys(toppedUp.medCatalog).length === Object.keys(state.medCatalog).length + INDIAN_DRUGS.length &&
+  Object.keys(toppedUp.medCatalog).length ===
+    Object.keys(state.medCatalog).length + INDIAN_DRUGS.length &&
     toppedUp.medCatalog.a1.name === "Augmentin Duo" &&
     mc.catalogKey(
       toppedUp.medCatalog.a5.name,
@@ -161,14 +171,22 @@ check(
 );
 check(
   "seed: Augmentin offers all 4 forms on screen, form-sorted",
-  mc.formsForName(seeded, "Augmentin").map((i) => i.form).join(",") ===
-    "Injection,Suspension,Syrup,Tablet",
+  mc
+    .formsForName(seeded, "Augmentin")
+    .map((i) => i.form)
+    .join(",") === "Injection,Suspension,Syrup,Tablet",
 );
 check(
   "seed: strength choice too — Wysolone 5/10/20 mg",
-  mc.formsForName(seeded, "WySoLoNe").map((i) => i.strength).join(",") === "10 mg,20 mg,5 mg",
+  mc
+    .formsForName(seeded, "WySoLoNe")
+    .map((i) => i.strength)
+    .join(",") === "10 mg,20 mg,5 mg",
 );
-check("seed: suggestions cover doctor+pharmacist typing", mc.suggestNames(seeded, "azi").join(",") === "Azithral");
+check(
+  "seed: suggestions cover doctor+pharmacist typing",
+  mc.suggestNames(seeded, "azi").join(",") === "Azithral",
+);
 check("seed: comprehensive Indian-market coverage (300+ entries)", INDIAN_DRUGS.length >= 300);
 check(
   "seed: A–Z navigation has wide letter coverage (>= 20 letters)",
