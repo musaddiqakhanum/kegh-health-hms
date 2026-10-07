@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useHms } from "@/lib/hms/store";
 import { searchPatients } from "@/lib/hms/selectors";
+import { useCurrentPatient } from "@/lib/hms/patient-context";
 import { Input, Select } from "./ui";
 
 export function PatientPicker({
@@ -11,7 +12,25 @@ export function PatientPicker({
   onChange: (id: string) => void;
 }) {
   const { state } = useHms();
+  const { patientId: current, setPatientId } = useCurrentPatient();
   const [q, setQ] = useState("");
+
+  /* "Patient everywhere": an empty picker starts on the device's current
+     patient (once), and whatever the user picks here becomes the current
+     patient for the next screen. */
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!prefilled.current && !value && current && state.patients[current]) {
+      prefilled.current = true;
+      onChange(current);
+    }
+  }, [value, current, state.patients, onChange]);
+
+  const handleChange = (id: string) => {
+    setPatientId(id);
+    onChange(id);
+  };
+
   const list = useMemo(
     () => searchPatients(Object.values(state.patients), q).slice(0, 50),
     [state.patients, q],
@@ -23,7 +42,7 @@ export function PatientPicker({
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
-      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select value={value} onChange={(e) => handleChange(e.target.value)}>
         <option value="">Select patient…</option>
         {value && !list.some((p) => p.id === value) && state.patients[value] ? (
           <option value={value}>

@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { HmsProvider } from "@/lib/hms/store";
 import { SessionProvider } from "@/lib/hms/session";
+import { CurrentPatientProvider } from "@/lib/hms/patient-context";
 import { AppShell } from "@/components/hms/AppShell";
 import keghLogo from "@/assets/kegh-logo.png.asset.json";
 
@@ -141,10 +142,12 @@ function RootComponent() {
       <ClientOnly fallback={<Splash />}>
         <HmsProvider>
           <SessionProvider>
-            <AppShell>
-              {/* Required: nested routes render here. */}
-              <Outlet />
-            </AppShell>
+            <CurrentPatientProvider>
+              <AppShell>
+                {/* Required: nested routes render here. */}
+                <Outlet />
+              </AppShell>
+            </CurrentPatientProvider>
           </SessionProvider>
         </HmsProvider>
       </ClientOnly>

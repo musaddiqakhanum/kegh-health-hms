@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { CheckCheck, Download, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
+import { BookOpen, CheckCheck, Download, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/hms/selectors";
 import { ageFromDob, fmtDate, fmtDateTime, todayISO } from "@/lib/hms/format";
 import { fulfilStatus, itemFlags, matchMedicine } from "@/lib/hms/fulfil";
+import { composeMedText, formsForName, suggestNames } from "@/lib/hms/medcatalog";
+import { MedicinePickerModal } from "@/components/hms/catalogue-browser";
 import { currentMonth, expiryStatus, sellableStock, suggestedRate } from "@/lib/hms/inventory";
 import { downloadCsv } from "@/lib/hms/csv";
 import type { Pharm, Prescription, PrescriptionItem, StockBatch, StockDraw } from "@/lib/hms/types";
@@ -89,6 +91,7 @@ function PrescriptionsPage() {
   const [printRx, setPrintRx] = useState<Prescription | null>(null);
   const [dispenseRx, setDispenseRx] = useState<Prescription | null>(null);
   const [range, setRange] = useState<RangeKey>("all");
+  const [pickerIdx, setPickerIdx] = useState<number | null>(null);
   const [fulfil, setFulfil] = useState<"" | "open" | "dispensed">("");
   const [q, setQ] = useState("");
 
@@ -379,45 +382,82 @@ function PrescriptionsPage() {
         <div className="mt-4">
           <p className="mb-2 text-sm font-medium text-foreground">Medicines</p>
           <div className="space-y-2">
-            {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 items-center gap-2">
-                <Input
-                  className="col-span-4"
-                  placeholder="Medicine"
-                  value={item.medication}
-                  onChange={(e) => setItem(idx, { medication: e.target.value })}
-                />
-                <Input
-                  className="col-span-2"
-                  placeholder="Dosage"
-                  value={item.dosage}
-                  onChange={(e) => setItem(idx, { dosage: e.target.value })}
-                />
-                <Input
-                  className="col-span-2"
-                  placeholder="Frequency"
-                  list="rx-frequency"
-                  value={item.frequency}
-                  onChange={(e) => setItem(idx, { frequency: e.target.value })}
-                />
-                <Input
-                  className="col-span-3"
-                  placeholder="Duration"
-                  list="rx-duration"
-                  value={item.duration}
-                  onChange={(e) => setItem(idx, { duration: e.target.value })}
-                />
-                <button
-                  className="col-span-1 text-muted-foreground hover:text-destructive"
-                  title="Remove medicine"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, items: (f.items ?? []).filter((_, i) => i !== idx) }))
-                  }
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+            {items.map((item, idx) => {
+              const variants = formsForName(state, item.medication);
+              return (
+                <div key={idx} className="grid grid-cols-12 items-center gap-2">
+                  <div className="col-span-4 space-y-1">
+                    <div className="flex gap-1.5">
+                      <Input
+                        className="flex-1"
+                        placeholder="Medicine — type 2+ letters for suggestions"
+                        list={`rx-catalog-${idx}`}
+                        value={item.medication}
+                        onChange={(e) => setItem(idx, { medication: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        title="Browse the medicine library with pictures"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border transition-colors hover:bg-secondary hover:text-foreground"
+                        onClick={() => setPickerIdx(idx)}
+                      >
+                        <BookOpen className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <datalist id={`rx-catalog-${idx}`}>
+                      {suggestNames(state, item.medication).map((n) => (
+                        <option key={n} value={n} />
+                      ))}
+                    </datalist>
+                    {variants.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {variants.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            title="Use this form / strength"
+                            className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent/20"
+                            onClick={() => setItem(idx, { medication: composeMedText(c) })}
+                          >
+                            {c.form || "Use"}
+                            {c.strength ? ` · ${c.strength}` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <Input
+                    className="col-span-2"
+                    placeholder="Dosage"
+                    value={item.dosage}
+                    onChange={(e) => setItem(idx, { dosage: e.target.value })}
+                  />
+                  <Input
+                    className="col-span-2"
+                    placeholder="Frequency"
+                    list="rx-frequency"
+                    value={item.frequency}
+                    onChange={(e) => setItem(idx, { frequency: e.target.value })}
+                  />
+                  <Input
+                    className="col-span-3"
+                    placeholder="Duration"
+                    list="rx-duration"
+                    value={item.duration}
+                    onChange={(e) => setItem(idx, { duration: e.target.value })}
+                  />
+                  <button
+                    className="col-span-1 text-muted-foreground hover:text-destructive"
+                    title="Remove medicine"
+                    onClick={() =>
+                      setForm((f) => ({ ...f, items: (f.items ?? []).filter((_, i) => i !== idx) }))
+                    }
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <Button
             variant="outline"
@@ -426,6 +466,14 @@ function PrescriptionsPage() {
           >
             <Plus className="h-4 w-4" /> Add medicine
           </Button>
+          <MedicinePickerModal
+            open={pickerIdx !== null}
+            onClose={() => setPickerIdx(null)}
+            title="Medicine library — click an option to fill this row"
+            onPick={(item) => {
+              if (pickerIdx !== null) setItem(pickerIdx, { medication: composeMedText(item) });
+            }}
+          />
         </div>
 
         <div className="mt-4 grid gap-4">

@@ -1,9 +1,10 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LogOut, Menu, Search, Wifi, WifiOff, X } from "lucide-react";
+import { LogOut, Menu, Search, UserRound, Wifi, WifiOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
+import { useCurrentPatient } from "@/lib/hms/patient-context";
 import { getStoredToken } from "@/lib/hms/drive";
 import { driveScopeFor, runSync } from "@/lib/hms/sync";
 import { activeUsers } from "@/lib/hms/selectors";
@@ -67,6 +68,8 @@ function PinLock({
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { settings, updateSettings, online, ready, state, mergeIn } = useHms();
   const { user, logout } = useSession();
+  const { patientId: currentId, setPatientId } = useCurrentPatient();
+  const currentPatient = currentId ? state.patients[currentId] : undefined;
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [drawer, setDrawer] = useState(false);
@@ -254,6 +257,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="hidden text-sm font-medium text-muted-foreground sm:block">
               {settings.hospitalName}
             </span>
+            {currentPatient ? (
+              <span className="flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-accent/30">
+                <UserRound className="h-3.5 w-3.5" />
+                <Link
+                  to="/patients/$patientId"
+                  params={{ patientId: currentPatient.id }}
+                  className="max-w-36 truncate hover:underline"
+                  title={`${currentPatient.name} — open patient file`}
+                >
+                  {currentPatient.name}
+                </Link>
+                <button
+                  className="text-accent/70 hover:text-accent"
+                  title="Clear current patient"
+                  onClick={() => setPatientId("")}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ) : null}
             {user ? (
               <>
                 <span className="hidden text-sm font-medium text-foreground md:block">

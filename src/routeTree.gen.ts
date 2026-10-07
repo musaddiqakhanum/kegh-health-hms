@@ -19,6 +19,7 @@ import { Route as ImagingOrdersRouteImport } from './routes/imaging-orders'
 import { Route as IpdRouteImport } from './routes/ipd'
 import { Route as LabOrdersRouteImport } from './routes/lab-orders'
 import { Route as LaboratoryRouteImport } from './routes/laboratory'
+import { Route as MedicinesRouteImport } from './routes/medicines'
 import { Route as PayrollRouteImport } from './routes/payroll'
 import { Route as PharmacyRouteImport } from './routes/pharmacy'
 import { Route as PrescriptionsRouteImport } from './routes/prescriptions'
@@ -81,6 +82,11 @@ const LabOrdersRoute = LabOrdersRouteImport.update({
 const LaboratoryRoute = LaboratoryRouteImport.update({
   id: '/laboratory',
   path: '/laboratory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MedicinesRoute = MedicinesRouteImport.update({
+  id: '/medicines',
+  path: '/medicines',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PayrollRoute = PayrollRouteImport.update({
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
+  '/medicines': typeof MedicinesRoute
   '/payroll': typeof PayrollRoute
   '/pharmacy': typeof PharmacyRoute
   '/prescriptions': typeof PrescriptionsRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
+  '/medicines': typeof MedicinesRoute
   '/payroll': typeof PayrollRoute
   '/pharmacy': typeof PharmacyRoute
   '/prescriptions': typeof PrescriptionsRoute
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/ipd': typeof IpdRoute
   '/lab-orders': typeof LabOrdersRoute
   '/laboratory': typeof LaboratoryRoute
+  '/medicines': typeof MedicinesRoute
   '/payroll': typeof PayrollRoute
   '/pharmacy': typeof PharmacyRoute
   '/prescriptions': typeof PrescriptionsRoute
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
+    | '/medicines'
     | '/payroll'
     | '/pharmacy'
     | '/prescriptions'
@@ -263,6 +273,7 @@ export interface FileRouteTypes {
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
+    | '/medicines'
     | '/payroll'
     | '/pharmacy'
     | '/prescriptions'
@@ -288,6 +299,7 @@ export interface FileRouteTypes {
     | '/ipd'
     | '/lab-orders'
     | '/laboratory'
+    | '/medicines'
     | '/payroll'
     | '/pharmacy'
     | '/prescriptions'
@@ -314,6 +326,7 @@ export interface RootRouteChildren {
   IpdRoute: typeof IpdRoute
   LabOrdersRoute: typeof LabOrdersRoute
   LaboratoryRoute: typeof LaboratoryRoute
+  MedicinesRoute: typeof MedicinesRoute
   PayrollRoute: typeof PayrollRoute
   PharmacyRoute: typeof PharmacyRoute
   PrescriptionsRoute: typeof PrescriptionsRoute
@@ -399,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/laboratory'
       fullPath: '/laboratory'
       preLoaderRoute: typeof LaboratoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/medicines': {
+      id: '/medicines'
+      path: '/medicines'
+      fullPath: '/medicines'
+      preLoaderRoute: typeof MedicinesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/payroll': {
@@ -506,6 +526,7 @@ const rootRouteChildren: RootRouteChildren = {
   IpdRoute: IpdRoute,
   LabOrdersRoute: LabOrdersRoute,
   LaboratoryRoute: LaboratoryRoute,
+  MedicinesRoute: MedicinesRoute,
   PayrollRoute: PayrollRoute,
   PharmacyRoute: PharmacyRoute,
   PrescriptionsRoute: PrescriptionsRoute,

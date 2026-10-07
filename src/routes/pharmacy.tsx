@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   Download,
   Package,
   PackagePlus,
@@ -11,6 +12,7 @@ import {
   Printer,
   Trash2,
   Truck,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
@@ -23,6 +25,7 @@ import {
   type Grn,
   type GrnItem,
   type Med,
+  type MedCatalogItem,
   type Pharm,
   type StockBatch,
   type StockDraw,
@@ -43,7 +46,25 @@ import {
   stockStatus,
   suggestedRate,
 } from "@/lib/hms/inventory";
+import { newCatalogRows, parseCatalogCsv, suggestNames } from "@/lib/hms/medcatalog";
+import { MedicinePickerModal } from "@/components/hms/catalogue-browser";
 import { downloadCsv } from "@/lib/hms/csv";
+
+/** Stock unit that best matches a catalogue dosage form. */
+const DEFAULT_UNIT_FOR_FORM: Record<string, string> = {
+  Tablet: "tablet",
+  Capsule: "capsule",
+  Syrup: "bottle",
+  Suspension: "bottle",
+  Injection: "vial",
+  Drops: "bottle",
+  "Ointment / Cream": "tube",
+  Inhaler: "piece",
+  Sachet: "sachet",
+  Suppository: "piece",
+  Consumable: "box",
+  Other: "piece",
+};
 import {
   Badge,
   Button,
@@ -138,6 +159,8 @@ const blankPharm = (): Partial<Pharm> => ({
 function PharmPage() {
   const { state } = useHms();
   const [tab, setTab] = useState<Tab>("inventory");
+  const [importOpen, setImportOpen] = useState(false);
+  const catalogCount = Object.keys(state.medCatalog ?? {}).length;
 
   const grns = useMemo(() => grnList(state), [state]);
   const expiryRef = currentMonth();
@@ -157,7 +180,15 @@ function PharmPage() {
 
   return (
     <div>
-      <PageHeader title="Pharmacy" subtitle="Inventory, batches, goods receipts and dispensing" />
+      <PageHeader
+        title="Pharmacy"
+        subtitle={`Inventory, batches, goods receipts and dispensing · catalogue ${catalogCount} items`}
+        actions={
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" /> Import catalogue
+          </Button>
+        }
+      />
 
       <div className="mb-4 inline-flex flex-wrap rounded-lg bg-muted p-1">
         {(
@@ -197,6 +228,7 @@ function PharmPage() {
       {tab === "batches" ? <BatchesTab /> : null}
       {tab === "grn" ? <GrnTab /> : null}
       {tab === "dispense" ? <DispenseTab /> : null}
+      <CatalogImportModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
@@ -261,6 +293,7 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
   const [filter, setFilter] = useState<"all" | "out" | "low">("all");
   const [open, setOpen] = useState(false);
   const [medForm, setMedForm] = useState<Partial<Med>>(blankMed);
+  const [cataloguePick, setCataloguePick] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchForm, setBatchForm] = useState<Partial<StockBatch>>(blankBatch);
 
@@ -548,11 +581,28 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Medicine name" required>
-            <Input
-              placeholder="Dolo 650"
-              value={medForm.name ?? ""}
-              onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))}
-            />
+            <div className="flex gap-1.5">
+              <Input
+                className="flex-1"
+                placeholder="Dolo 650"
+                list="med-catalog-names"
+                value={medForm.name ?? ""}
+                onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <button
+                type="button"
+                title="Browse the medicine library with pictures — fills category & unit too"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border transition-colors hover:bg-secondary hover:text-foreground"
+                onClick={() => setCataloguePick(true)}
+              >
+                <BookOpen className="h-4 w-4" />
+              </button>
+            </div>
+            <datalist id="med-catalog-names">
+              {suggestNames(state, medForm.name ?? "").map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Generic / salt name">
             <Input
@@ -639,6 +689,23 @@ function InventoryTab({ goBatches }: { goBatches: () => void }) {
           <Button onClick={saveMed}>Save medicine</Button>
         </div>
       </Modal>
+
+      <MedicinePickerModal
+        open={cataloguePick}
+        onClose={() => setCataloguePick(false)}
+        title="Medicine library — choose the medicine to stock"
+        pickLabel="Stock"
+        onPick={(item) => {
+          const unit = DEFAULT_UNIT_FOR_FORM[item.form] ?? "piece";
+          setMedForm((f) => ({
+            ...f,
+            name: item.name,
+            genericName: f.genericName || item.strength || "",
+            category: item.form || "",
+            unit,
+          }));
+        }}
+      />
 
       {/* quick add stock modal (shared shape with the Batches tab modal is intentional:
           quantities here create a brand-new batch) */}
@@ -1734,5 +1801,156 @@ function DispenseTab() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/* -------------------------------------------------- medicine catalogue import */
+
+function CatalogImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { state, upsert } = useHms();
+  const [text, setText] = useState("");
+  const [name, setName] = useState("");
+  const [form, setForm] = useState("Tablet");
+  const [strength, setStrength] = useState("");
+
+  const parsed = parseCatalogCsv(text);
+  const deduped = newCatalogRows(state, parsed.items);
+
+  const readFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setText(String(reader.result ?? ""));
+    reader.readAsText(file);
+  };
+
+  const importAll = () => {
+    if (!deduped.fresh.length) {
+      toast.error(
+        parsed.items.length
+          ? "Everything here is already in the catalogue"
+          : "Paste or choose a CSV first",
+      );
+      return;
+    }
+    for (const row of deduped.fresh) {
+      upsert<MedCatalogItem>("medCatalog", {
+        name: row.name,
+        form: row.form,
+        strength: row.strength,
+      } as Partial<MedCatalogItem>);
+    }
+    toast.success(
+      `Catalogue imported — ${deduped.fresh.length} added` +
+        (deduped.skipped ? `, ${deduped.skipped} duplicates skipped` : "") +
+        (parsed.errors.length ? `, ${parsed.errors.length} bad lines` : ""),
+    );
+    setText("");
+    onClose();
+  };
+
+  const addOne = () => {
+    const n = name.trim();
+    if (!n) {
+      toast.error("Enter the medicine name");
+      return;
+    }
+    const { fresh, skipped } = newCatalogRows(state, [
+      { name: n, form, strength: strength.trim() },
+    ]);
+    if (!fresh.length || skipped) {
+      toast.error("Already in the catalogue — edit stock from the Inventory tab");
+      return;
+    }
+    upsert<MedCatalogItem>("medCatalog", { name: n, form, strength: strength.trim() });
+    toast.success(`Added to catalogue — ${n}`);
+    setName("");
+    setStrength("");
+  };
+
+  return (
+    <Modal open={open} title="Medicine catalogue — import & add" onClose={onClose} wide>
+      <p className="mb-3 text-sm text-muted-foreground">
+        One shared list for everyone: the doctor's prescription autocomplete and the pharmacist's
+        stock screens both read this catalogue. 300+ Indian-market medicines come pre-loaded on
+        first run — browse them from the Medicine Library page or the little book icon next to any
+        medicine name box. Paste rows as{" "}
+        <code className="rounded bg-muted px-1">name, form, strength</code> — one medicine per line
+        (strength optional). Duplicates are skipped automatically.
+      </p>
+
+      <Field label="Add one medicine">
+        <div className="grid gap-2 sm:grid-cols-[1fr_10rem_10rem_auto]">
+          <Input
+            placeholder="e.g. Augmentin Duo"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Select value={form} onChange={(e) => setForm(e.target.value)}>
+            {MED_CATEGORIES.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
+          <Input
+            placeholder="Strength e.g. 625 mg"
+            value={strength}
+            onChange={(e) => setStrength(e.target.value)}
+          />
+          <Button onClick={addOne}>
+            <Plus className="h-4 w-4" /> Add
+          </Button>
+        </div>
+      </Field>
+
+      <Field label="Bulk import (CSV text)">
+        <Textarea
+          rows={7}
+          placeholder={
+            "name, form, strength\nDolo 650, Tablet, 650 mg\nAugmentin Duo, Syrup, 457 mg/5 ml"
+          }
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </Field>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <label className="cursor-pointer rounded-md bg-muted px-3 py-1.5 text-sm font-medium ring-1 ring-border hover:bg-secondary">
+          <Upload className="mr-1 inline h-3.5 w-3.5" /> Choose .csv file
+          <input
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            className="hidden"
+            onChange={(e) => readFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {parsed.items.length > 0 ? (
+          <span className="text-muted-foreground">
+            {deduped.fresh.length} new · {deduped.skipped} duplicate · {parsed.errors.length} bad
+            line
+            {parsed.errors.length === 1 ? "" : "s"}
+            {parsed.errors.length ? ` (first: ${parsed.errors[0]})` : ""}
+          </span>
+        ) : null}
+      </div>
+      {deduped.fresh.length > 0 ? (
+        <ul className="mt-2 max-h-32 space-y-0.5 overflow-auto rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+          {deduped.fresh.slice(0, 8).map((r, i) => (
+            <li key={i}>
+              {r.name}
+              {r.strength ? ` ${r.strength}` : ""}
+              {r.form ? ` (${r.form})` : ""}
+            </li>
+          ))}
+          {deduped.fresh.length > 8 ? <li>…and {deduped.fresh.length - 8} more</li> : null}
+        </ul>
+      ) : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={importAll} disabled={!deduped.fresh.length}>
+          Import {deduped.fresh.length ? `${deduped.fresh.length} items` : ""}
+        </Button>
+      </div>
+    </Modal>
   );
 }

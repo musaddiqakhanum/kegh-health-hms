@@ -53,3 +53,18 @@
       sections with turnaround stats, print and CSV
 - [x] IPD expected-discharge date + "Discharging today" strip on the
       admissions tab with one-click discharge now
+- [x] Current patient everywhere — header chip plus every patient picker
+      pre-selecting the last chosen patient across screens
+- [x] Shared medicine catalogue — CSV/paste import + quick add on the Pharmacy
+      page; prescription & stock name fields autocomplete from it; doctor gets
+      form chips (Syrup / Drops / Injection / Suspension…) when names collide
+- [x] Indian medicine starter list — ~70 common brands auto-loaded into the
+      shared catalogue on first run (deterministic ids, so offline devices
+      merge without duplicates); top-ups still possible via CSV import
+- [x] Medicine Library page — 300+ Indian-market medicine entries with
+      illustrated picture tiles, A–Z letter navigation, search and form
+      filters; the same picker opens from the doctor's prescription row and
+      from the pharmacist's Add Medicine (add stock) dialog
+- [x] Drug seed is versioned and merges missing entries — existing devices
+      top up from 70 to 305 rows automatically on next load, nothing they
+      added is ever overwritten
