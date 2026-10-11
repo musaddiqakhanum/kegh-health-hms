@@ -508,6 +508,190 @@ export interface Bill {
   paid: number;
   due: number;
   paymentMode: string;
+  /** Payer the bill is addressed to (empty = self pay). */
+  payerId?: ID | undefined;
+  /** Snapshot of the payer name, so old bills survive payer master edits. */
+  payerName?: string | undefined;
+  createdAt: number;
+}
+
+/** Payment modes offered on bills and claim settlements. */
+export const BILL_PAYMENT_MODES: string[] = [
+  "Cash",
+  "UPI",
+  "Card",
+  "Cheque",
+  "Bank transfer",
+  "Insurance / TPA",
+  "Scheme (PM-JAY)",
+];
+
+/* ------------------------------------------------- insurance / claims desk */
+
+/** How a payer is classified — drives register filters and reports. */
+export type PayerType = "Government scheme" | "Private insurer" | "TPA" | "Corporate" | "Self pay";
+
+export const PAYER_TYPES: PayerType[] = [
+  "Government scheme",
+  "Private insurer",
+  "TPA",
+  "Corporate",
+  "Self pay",
+];
+
+/**
+ * Somebody the hospital bills for a patient's treatment: an insurer, a
+ * government scheme (PM-JAY, CGHS, ESIC…), a TPA that processes claims for
+ * several insurers, or a corporate / employer panel.
+ */
+export interface Payer {
+  id: ID;
+  name: string;
+  type: PayerType | string;
+  /** Short code printed on registers, e.g. "PMJAY". */
+  code: string;
+  /** Claim desk phone, email or portal used for follow-ups. */
+  contact: string;
+  /** Days the payer usually takes to settle after submission — ages claims. */
+  settlementDays: number;
+  /** Inactive payers stay on file but are hidden from new claim pickers. */
+  active: boolean;
+  notes: string;
+  createdAt: number;
+}
+
+/** Statuses a claim moves through — pre-auth first, then submission, then money in. */
+export type ClaimStatus =
+  | "Preparing"
+  | "Pre-auth sent"
+  | "Pre-auth approved"
+  | "Pre-auth rejected"
+  | "Claim submitted"
+  | "Query raised"
+  | "Approved"
+  | "Settled"
+  | "Partially settled"
+  | "Rejected";
+
+export const CLAIM_STATUSES: ClaimStatus[] = [
+  "Preparing",
+  "Pre-auth sent",
+  "Pre-auth approved",
+  "Pre-auth rejected",
+  "Claim submitted",
+  "Query raised",
+  "Approved",
+  "Settled",
+  "Partially settled",
+  "Rejected",
+];
+
+/** Statuses where the desk still has work to do — the open claim file. */
+export const OPEN_CLAIM_STATUSES: ClaimStatus[] = [
+  "Preparing",
+  "Pre-auth sent",
+  "Pre-auth approved",
+  "Claim submitted",
+  "Query raised",
+  "Approved",
+];
+
+/** Nothing more to chase: settled (fully or partly) or thrown out. */
+export const CLOSED_CLAIM_STATUSES: ClaimStatus[] = [
+  "Settled",
+  "Partially settled",
+  "Rejected",
+  "Pre-auth rejected",
+];
+
+/** Paperwork a claim file carries — the checklist staff tick off. */
+export const CLAIM_DOCUMENTS: string[] = [
+  "Discharge summary",
+  "Indoor case papers",
+  "Investigation reports",
+  "Pharmacy bills",
+  "OT / procedure notes",
+  "Pre-auth approval letter",
+  "Patient ID proof",
+  "Ayushman / policy card copy",
+  "Bill & payment receipt",
+  "Referral letter",
+  "Death / MLC papers",
+  "Other supporting papers",
+];
+
+/** One line of a claim's document checklist. */
+export interface ClaimDoc {
+  name: string;
+  ready: boolean;
+}
+
+/** One stamped step in a claim's history — status moves and settlements. */
+export interface ClaimEvent {
+  /** When the step happened (ms epoch). */
+  at: number;
+  /** Status the claim was moved to (or "Settled ₹x" style note target). */
+  status: string;
+  /** Who did it — session display name or device name. */
+  by: string;
+  note: string;
+}
+
+/**
+ * One insurance claim the hospital raises for a patient's treatment —
+ * pre-auth → submission → approval → settlement, with the paperwork checklist
+ * and a stamped history so anyone can see where the money is.
+ */
+export interface Claim {
+  id: ID;
+  /** Running claim number, shown as CLM-42. */
+  claimNo: number;
+  patientId: ID;
+  visitId: ID;
+  /** Linked IPD stay, when the claim covers an admission. */
+  admissionId: ID;
+  /** Patient bill this claim is raised against, when one exists. */
+  billId: ID;
+  payerId: ID;
+  /** Snapshot of the payer name — printed claims survive payer master edits. */
+  payerName: string;
+  /** Scheme / plan text, e.g. "PM-JAY (Ayushman Bharat)". */
+  scheme: string;
+  /** Policy number or Ayushman card number presented at the desk. */
+  policyNo: string;
+  /** Date the claim was opened, YYYY-MM-DD. */
+  date: string;
+  /** Diagnosis / procedure being claimed for. */
+  treatment: string;
+  admissionDate: string;
+  dischargeDate: string;
+  /** Package / procedure code agreed with the payer. */
+  packageCode: string;
+  /** Amount billed to the payer (₹) — pre-fills from the linked bill. */
+  claimedAmount: number;
+  /** Amount the payer approved after deductions (₹). */
+  approvedAmount: number;
+  /** Money actually received from the payer (₹). */
+  settledAmount: number;
+  /** Co-pay / non-payable share the patient bears (₹). */
+  patientShare: number;
+  status: ClaimStatus;
+  /** The payer's own claim / pre-auth reference number. */
+  reference: string;
+  docs: ClaimDoc[];
+  events: ClaimEvent[];
+  notes: string;
+  /** Who assembled the file. */
+  preparedBy: string;
+  /** Date the money landed, YYYY-MM-DD. */
+  settledOn: string;
+  /** UTR / cheque / settlement reference. */
+  settlementRef: string;
+  /**
+   * How much of the settlement has already been posted to the patient's bill
+   * (₹). Re-settling posts only the difference, so no double-posting.
+   */
+  settlementPosted: number;
   createdAt: number;
 }
 
@@ -848,6 +1032,8 @@ export type Collection =
   | "batches"
   | "grns"
   | "bills"
+  | "payers"
+  | "claims"
   | "appointments"
   | "doctorSchedules"
   | "prescriptions"
@@ -877,6 +1063,8 @@ export const COLLECTIONS: Collection[] = [
   "batches",
   "grns",
   "bills",
+  "payers",
+  "claims",
   "appointments",
   "doctorSchedules",
   "prescriptions",
@@ -906,6 +1094,8 @@ export interface HmsState {
   batches: Record<ID, StockBatch>;
   grns: Record<ID, Grn>;
   bills: Record<ID, Bill>;
+  payers: Record<ID, Payer>;
+  claims: Record<ID, Claim>;
   appointments: Record<ID, Appointment>;
   doctorSchedules: Record<ID, DoctorSchedule>;
   prescriptions: Record<ID, Prescription>;
@@ -1009,6 +1199,8 @@ export const emptyState = (): HmsState => ({
   batches: {},
   grns: {},
   bills: {},
+  payers: {},
+  claims: {},
   appointments: {},
   doctorSchedules: {},
   prescriptions: {},

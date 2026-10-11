@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { loadState, saveState } from "./db";
 import { seedIndianDrugs } from "./medcatalog";
+import { seedPayers } from "./claims";
 import { mergeStates } from "./merge";
 import { craftAuditEntry, isAuditedCollection } from "./audit";
 import {
@@ -68,7 +69,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     loadState().then((loaded) => {
       if (cancelled) return;
-      setState(seedIndianDrugs(loaded));
+      setState(seedPayers(seedIndianDrugs(loaded)));
       setReady(true);
     });
     setOnline(navigator.onLine);

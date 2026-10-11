@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as BillingRouteImport } from './routes/billing'
+import { Route as ClaimsRouteImport } from './routes/claims'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as HandoverRouteImport } from './routes/handover'
 import { Route as ImagingOrdersRouteImport } from './routes/imaging-orders'
@@ -53,6 +54,11 @@ const AuditRoute = AuditRouteImport.update({
 const BillingRoute = BillingRouteImport.update({
   id: '/billing',
   path: '/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClaimsRoute = ClaimsRouteImport.update({
+  id: '/claims',
+  path: '/claims',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/appointments': typeof AppointmentsRoute
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
+  '/claims': typeof ClaimsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/appointments': typeof AppointmentsRoute
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
+  '/claims': typeof ClaimsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/appointments': typeof AppointmentsRoute
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
+  '/claims': typeof ClaimsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/appointments'
     | '/audit'
     | '/billing'
+    | '/claims'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/appointments'
     | '/audit'
     | '/billing'
+    | '/claims'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/appointments'
     | '/audit'
     | '/billing'
+    | '/claims'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   AppointmentsRoute: typeof AppointmentsRoute
   AuditRoute: typeof AuditRoute
   BillingRoute: typeof BillingRoute
+  ClaimsRoute: typeof ClaimsRoute
   ExpensesRoute: typeof ExpensesRoute
   HandoverRoute: typeof HandoverRoute
   ImagingOrdersRoute: typeof ImagingOrdersRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof BillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/claims': {
+      id: '/claims'
+      path: '/claims'
+      fullPath: '/claims'
+      preLoaderRoute: typeof ClaimsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -540,6 +560,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppointmentsRoute: AppointmentsRoute,
   AuditRoute: AuditRoute,
   BillingRoute: BillingRoute,
+  ClaimsRoute: ClaimsRoute,
   ExpensesRoute: ExpensesRoute,
   HandoverRoute: HandoverRoute,
   ImagingOrdersRoute: ImagingOrdersRoute,

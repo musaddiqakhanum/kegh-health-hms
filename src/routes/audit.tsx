@@ -98,6 +98,14 @@ function recordLabel(state: ReturnType<typeof useHms>["state"], a: AuditLog): st
       const bill = byId(state.bills);
       return bill ? `Bill · ${state.patients[bill.patientId]?.name ?? ""}` : "";
     }
+    case "claims": {
+      const cl = byId(state.claims);
+      return cl
+        ? `CLM-${cl.claimNo} · ${state.patients[cl.patientId]?.name ?? "—"} · ₹${cl.claimedAmount}`
+        : "";
+    }
+    case "payers":
+      return byId(state.payers)?.name ?? "";
     case "appointments": {
       const ap = byId(state.appointments);
       return ap ? `${ap.date} ${ap.time} · ${state.patients[ap.patientId]?.name ?? ""}` : "";

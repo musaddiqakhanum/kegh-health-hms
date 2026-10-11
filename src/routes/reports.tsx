@@ -19,6 +19,8 @@ import {
 } from "@/lib/hms/selectors";
 import { fmtDate, money, todayISO } from "@/lib/hms/format";
 import { stayDays } from "@/lib/hms/ipd";
+import { claimPending, claimStats } from "@/lib/hms/claims";
+import { BILL_PAYMENT_MODES } from "@/lib/hms/types";
 import { currentPeriod, shortPeriodLabel } from "@/lib/hms/payroll";
 import { downloadCsv } from "@/lib/hms/csv";
 import { Badge, Button, Card, Field, PageHeader, Select } from "@/components/hms/ui";
@@ -52,7 +54,8 @@ type Section =
   | "prescriptions"
   | "admissions"
   | "labOrders"
-  | "imagingOrders";
+  | "imagingOrders"
+  | "claims";
 const SECTION_LABELS: Record<Section, string> = {
   labs: "Laboratory",
   bills: "Billing",
@@ -63,6 +66,7 @@ const SECTION_LABELS: Record<Section, string> = {
   admissions: "Admissions (IPD)",
   labOrders: "Lab orders",
   imagingOrders: "Imaging orders",
+  claims: "Insurance claims",
 };
 
 function ReportsPage() {
@@ -288,8 +292,47 @@ function ReportsPage() {
         ],
       };
     }
+    if (section === "claims") {
+      const r = rows as unknown as (typeof state.claims)[string][];
+      const stats = claimStats(r);
+      return {
+        head: [
+          "Date",
+          "Claim",
+          "Patient",
+          "Payer",
+          "Status",
+          "Claimed",
+          "Approved",
+          "Settled",
+          "Pending",
+        ],
+        body: r.map((x) => [
+          fmtDate(x.date),
+          `CLM-${x.claimNo}`,
+          name(x.patientId),
+          x.payerName,
+          x.status,
+          money(x.claimedAmount),
+          money(x.approvedAmount),
+          money(x.settledAmount),
+          money(claimPending(x)),
+        ]),
+        summary: [
+          ["Claims", String(stats.total)],
+          ["Open", String(stats.open)],
+          ["Claimed", money(stats.claimed)],
+          ["Approved", money(stats.approved)],
+          ["Received", money(stats.settled)],
+          ["Pending with payers", money(stats.pending)],
+          ["Patient share", money(stats.patientShare)],
+          ["Settlement rate", `${stats.settlementRate}%`],
+          ["Rejected", String(stats.byStatus["Rejected"] ?? 0)],
+        ],
+      };
+    }
     const r = rows as unknown as (typeof state.bills)[string][];
-    const modes = ["Cash", "UPI", "Card", "Insurance"];
+    const modes = BILL_PAYMENT_MODES;
     return {
       head: ["Date", "Patient", "Total", "Paid", "Due", "Mode"],
       body: r.map((x) => [
