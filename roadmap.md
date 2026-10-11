@@ -66,5 +66,9 @@
       filters; the same picker opens from the doctor's prescription row and
       from the pharmacist's Add Medicine (add stock) dialog
 - [x] Drug seed is versioned and merges missing entries — existing devices
-      top up from 70 to 305 rows automatically on next load, nothing they
+      top up from 70 to 304 rows automatically on next load, nothing they
       added is ever overwritten
+      (the count is `INDIAN_DRUGS.length` in `src/lib/hms/indian-drugs.ts`;
+      `scripts/smoke-medcatalog.mjs` asserts it stays at 300+. Earlier commit
+      messages on this branch say "305" — that was the intent, the shipped
+      list is 304 and the history is published, so the docs follow the data.)
