@@ -30,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# This repo pins dependencies with bun.lock. `npm ci` therefore cannot run
+# (there is no package-lock.json); use `npm install` or `bun install`.
+# The npm lockfile an install leaves behind is machine-generated and must
+# never be committed.
+package-lock.json
