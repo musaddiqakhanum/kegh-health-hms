@@ -7,6 +7,7 @@ import {
   DoctorWorkspace,
   GenericWorkspace,
   LabWorkspace,
+  NursingWorkspace,
   PharmacyWorkspace,
   ReceptionWorkspace,
 } from "@/components/hms/workspaces";
@@ -37,6 +38,7 @@ function WorkspacePage() {
   if (role === "Admin") return <Navigate to="/" />;
   if (role === "Reception") return <ReceptionWorkspace />;
   if (role === "Doctor") return <DoctorWorkspace />;
+  if (role === "Nursing") return <NursingWorkspace />;
   if (role === "Lab") return <LabWorkspace />;
   if (role === "Pharmacy") return <PharmacyWorkspace />;
   if (role === "Billing") return <BillingWorkspace />;

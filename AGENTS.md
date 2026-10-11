@@ -16,7 +16,7 @@
 
 ## Gates to run before committing
 
-1. Run every smoke suite in `scripts/smoke-*.mjs` (all 10 suites must pass):
+1. Run every smoke suite in `scripts/smoke-*.mjs` (all 11 suites must pass):
    ```bash
    for f in scripts/smoke-*.mjs; do node "$f"; done
    ```

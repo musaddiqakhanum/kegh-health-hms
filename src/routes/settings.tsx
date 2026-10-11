@@ -43,7 +43,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const ROLES: Role[] = ["Admin", "Reception", "Doctor", "Lab", "Pharmacy", "Billing"];
+const ROLES: Role[] = ["Admin", "Reception", "Doctor", "Nursing", "Lab", "Pharmacy", "Billing"];
 
 function SettingsPage() {
   const { settings, updateSettings, state, mergeIn, upsert } = useHms();
