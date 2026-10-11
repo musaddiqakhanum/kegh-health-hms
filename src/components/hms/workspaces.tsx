@@ -13,6 +13,7 @@ import {
   Receipt,
   Scan,
   ScrollText,
+  ShieldCheck,
   Stethoscope,
   TestTube2,
   UserCheck,
@@ -46,6 +47,7 @@ import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { bedStats } from "@/lib/hms/ipd";
 import { nursingStats, wardRounds, vitalsSummary, vitalFlags } from "@/lib/hms/nursing";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
+import { claimPending, claimQueueStats, claimTone, openClaims } from "@/lib/hms/claims";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
 import type { Appointment } from "@/lib/hms/types";
@@ -178,6 +180,7 @@ export function ReceptionWorkspace() {
   const bedsOccupied = useMemo(() => bedStats(state), [state]);
   const handoverCounts = useMemo(() => handoverStats(state), [state]);
   const due = useMemo(() => dueBills(state), [state]);
+  const claims = useMemo(() => claimQueueStats(state), [state]);
   const serving = useMemo(() => waitingQueue(state, today)[0] ?? null, [state, today]);
   const count = (s: Appointment["status"]) => day.filter((a) => a.status === s).length;
   const arrivals = useMemo(
@@ -236,6 +239,12 @@ export function ReceptionWorkspace() {
           label="Bills with dues"
           value={due.length}
           tone={due.length ? "red" : undefined}
+        />
+        <WsStat
+          to="/claims"
+          label="Claims awaiting pre-auth"
+          value={claims.preAuthPending}
+          tone={claims.preAuthPending ? "amber" : undefined}
         />
         <WsStat
           to="/billing"
@@ -319,6 +328,12 @@ export function ReceptionWorkspace() {
               label: "Shift handover",
               icon: NotebookPen,
               hint: "Notes for relief staff",
+            },
+            {
+              to: "/claims",
+              label: "Insurance claims",
+              icon: ShieldCheck,
+              hint: "Pre-auth for insured patients",
             },
           ]}
         />
@@ -962,6 +977,8 @@ export function BillingWorkspace() {
   const partial = due.filter((d) => d.partial);
   const collected = useMemo(() => todayCollection(state), [state]);
   const totalDue = due.reduce((s, d) => s + Number(d.bill.due || 0), 0);
+  const claims = useMemo(() => claimQueueStats(state), [state]);
+  const claimsOpen = useMemo(() => openClaims(state), [state]);
 
   return (
     <div className="space-y-6">
@@ -982,6 +999,28 @@ export function BillingWorkspace() {
         />
         <WsStat to="/billing" label="Total due" value={money(totalDue)} />
         <WsStat to="/billing" label="Collected today" value={money(collected)} tone="green" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <WsStat
+          to="/claims"
+          label="Open claims"
+          value={claims.open}
+          tone={claims.open ? "amber" : undefined}
+        />
+        <WsStat to="/claims" label="Pending from payers" value={money(claims.pendingAmount)} />
+        <WsStat
+          to="/claims"
+          label="Settled this month"
+          value={money(claims.settledThisMonthAmount)}
+          tone="green"
+        />
+        <WsStat
+          to="/claims"
+          label="Overdue follow-ups"
+          value={claims.overdue}
+          tone={claims.overdue ? "red" : undefined}
+        />
       </div>
 
       <Section
@@ -1019,6 +1058,41 @@ export function BillingWorkspace() {
         )}
       </Section>
 
+      <Section
+        title="Claims with the payer"
+        badge={<Badge tone={claims.open ? "amber" : "neutral"}>{claims.open} open</Badge>}
+      >
+        {claimsOpen.length === 0 ? (
+          <EmptyRow>No open claims — every insurance file is closed.</EmptyRow>
+        ) : (
+          <DataTable
+            columns={["Claim", "Patient", "Payer", "Claimed", "Pending", "Status"]}
+            rowCount={claimsOpen.length}
+          >
+            {claimsOpen.slice(0, 10).map((c) => (
+              <tr key={c.id}>
+                <Td className="whitespace-nowrap font-medium">CLM-{c.claimNo}</Td>
+                <Td>
+                  <Link
+                    to="/patients/$patientId"
+                    params={{ patientId: c.patientId }}
+                    className="text-accent underline"
+                  >
+                    {patientName(state, c.patientId)}
+                  </Link>
+                </Td>
+                <Td className="text-xs">{c.payerName}</Td>
+                <Td>{money(c.claimedAmount)}</Td>
+                <Td>{money(claimPending(c))}</Td>
+                <Td>
+                  <Badge tone={claimTone(c.status)}>{c.status}</Badge>
+                </Td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </Section>
+
       <QuickLinks
         title="Quick actions"
         links={[
@@ -1027,6 +1101,12 @@ export function BillingWorkspace() {
             label: "Billing",
             icon: IndianRupee,
             hint: "Raise bills and take payments",
+          },
+          {
+            to: "/claims",
+            label: "Insurance claims",
+            icon: ShieldCheck,
+            hint: "Pre-auth, submission and settlement",
           },
           {
             to: "/expenses",

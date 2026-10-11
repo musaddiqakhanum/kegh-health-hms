@@ -9,6 +9,7 @@ import { admissionsForPatient } from "@/lib/hms/ipd";
 import { ordersForPatient } from "@/lib/hms/laborders";
 import { imagingOrdersForPatient } from "@/lib/hms/imaging";
 import { notesForPatient } from "@/lib/hms/handover";
+import { claimPending, claimTone, claimsForPatient } from "@/lib/hms/claims";
 import {
   notesForPatient as nursingNotesForPatient,
   vitalFlags,
@@ -89,6 +90,7 @@ function Patient360() {
   const handoverRows = useMemo(() => notesForPatient(state, patientId), [state, patientId]);
   const vitalsRows = useMemo(() => vitalsForPatient(state, patientId), [state, patientId]);
   const nursingRows = useMemo(() => nursingNotesForPatient(state, patientId), [state, patientId]);
+  const claimRows = useMemo(() => claimsForPatient(state, patientId), [state, patientId]);
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -167,6 +169,15 @@ function Patient360() {
       rows.push(["Pharmacy", p.date, p.medication, `${p.qty} x ${p.rate}`, p.qty * p.rate]),
     );
     bills.forEach((b) => rows.push(["Bill", b.date, b.totalAmount, b.paid, b.due]));
+    claimRows.forEach((c) =>
+      rows.push([
+        "Insurance claim",
+        c.date,
+        `CLM-${c.claimNo} · ${c.payerName}`,
+        `Claimed ${c.claimedAmount} · settled ${c.settledAmount}`,
+        c.status,
+      ]),
+    );
     downloadCsv(`${patient.mrn.replace(/\//g, "-")}-record.csv`, rows);
   };
 
@@ -376,6 +387,46 @@ function Patient360() {
                   </p>
                 </li>
               ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Insurance &amp; claims ({claimRows.length})
+            </h3>
+            <Link to="/claims" className="text-xs font-medium text-accent underline">
+              Claims desk →
+            </Link>
+          </div>
+          <p className="mb-2 text-xs text-muted-foreground">
+            {patient.pmjayScheme || "No scheme on file"} · Card {patient.pmjayCardId || "—"} ·{" "}
+            {patient.pmjayStatus || "Not enrolled"}
+            {patient.pmjayVerified ? " (verified)" : ""}
+          </p>
+          {claimRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No claims raised for this patient.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {claimRows.slice(0, 6).map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">CLM-{c.claimNo}</span>
+                  <span className="text-muted-foreground">{c.payerName || "—"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {money(c.claimedAmount)} claimed
+                    {claimPending(c) > 0 ? ` · ${money(claimPending(c))} pending` : ""}
+                  </span>
+                  <span className="ml-auto">
+                    <Badge tone={claimTone(c.status)}>{c.status}</Badge>
+                  </span>
+                </li>
+              ))}
+              {claimRows.length > 6 ? (
+                <li className="text-xs text-muted-foreground">
+                  + {claimRows.length - 6} more claim{claimRows.length - 6 === 1 ? "" : "s"}
+                </li>
+              ) : null}
             </ul>
           )}
         </Card>

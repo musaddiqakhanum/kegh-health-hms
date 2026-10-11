@@ -18,6 +18,7 @@ import {
   Receipt,
   Scan,
   ScrollText,
+  ShieldCheck,
   Settings as SettingsIcon,
   Stethoscope,
   TestTube2,
@@ -52,6 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/pharmacy", label: "Pharmacy", icon: Pill, key: "pharms" },
   { to: "/medicines", label: "Medicine Library", icon: BookOpen, key: "medicines" },
   { to: "/billing", label: "Billing", icon: IndianRupee, key: "billing" },
+  { to: "/claims", label: "Insurance Claims", icon: ShieldCheck, key: "claims" },
   { to: "/staff", label: "Staff Records", icon: UsersRound, key: "staff" },
   { to: "/payroll", label: "Payroll", icon: Banknote, key: "payroll" },
   { to: "/expenses", label: "Expenses", icon: Receipt, key: "expenses" },
@@ -77,6 +79,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "visits",
     "ipd",
     "billing",
+    "claims",
     "reports",
     "settings",
   ],
@@ -111,6 +114,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "imagingOrders",
     "pharms",
     "medicines",
+    "claims",
     "settings",
   ],
   Lab: [
@@ -135,7 +139,16 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "reports",
     "settings",
   ],
-  Billing: ["workspace", "handover", "dash", "patients", "billing", "reports", "settings"],
+  Billing: [
+    "workspace",
+    "handover",
+    "dash",
+    "patients",
+    "billing",
+    "claims",
+    "reports",
+    "settings",
+  ],
 };
 
 export function navForRole(role: Role): NavItem[] {

@@ -77,3 +77,10 @@
       `scripts/smoke-medcatalog.mjs` asserts it stays at 300+. Earlier commit
       messages on this branch say "305" — that was the intent, the shipped
       list is 304 and the history is published, so the docs follow the data.)
+- [x] Insurance & PM-JAY claims desk — payer master (insurer / TPA / scheme, seeded with a
+      built-in Indian list), claim file per patient or IPD stay, pre-auth → submission →
+      approval → settlement workflow with stamped history, document checklist, ageing against
+      each payer's settlement window, one-click settlement posting to the patient's bill
+      (delta-based, so re-saving never double-posts), payer on bills, claim register CSV +
+      printable claim sheet, Reports → Insurance claims, Patient 360 claims card and
+      Billing / Reception workspace tiles

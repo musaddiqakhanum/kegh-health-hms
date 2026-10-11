@@ -6,6 +6,7 @@ import { dashboardStats, sortByDateDesc } from "@/lib/hms/selectors";
 import { fmtDate, isSameDay, money } from "@/lib/hms/format";
 import { getStoredToken } from "@/lib/hms/drive";
 import { driveScopeFor } from "@/lib/hms/sync";
+import { claimQueueStats } from "@/lib/hms/claims";
 import { Button, Card, DataTable, PageHeader, Td } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 
@@ -37,6 +38,7 @@ function Dashboard() {
   const { state, settings } = useHms();
   const [dayEnd, setDayEnd] = useState(false);
   const stats = useMemo(() => dashboardStats(state), [state]);
+  const claims = useMemo(() => claimQueueStats(state), [state]);
   const recent = useMemo(
     () => sortByDateDesc(Object.values(state.visits)).slice(0, 6),
     [state.visits],
@@ -93,6 +95,8 @@ function Dashboard() {
         <Stat label="Today's collection" value={money(stats.collectionToday)} />
         <Stat label="Admitted (IPD)" value={stats.admitted} />
         <Stat label="All-time collection" value={money(stats.collectionAll)} />
+        {isAdmin ? <Stat label="Open claims" value={claims.open} /> : null}
+        {isAdmin ? <Stat label="Pending from payers" value={money(claims.pendingAmount)} /> : null}
         {isAdmin ? <Stat label="Staff on roll" value={stats.staffOnRoll} /> : null}
         {isAdmin ? <Stat label="Salaries this month" value={money(stats.salaryThisMonth)} /> : null}
       </div>

@@ -1,11 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { sortByDateDesc } from "@/lib/hms/selectors";
 import { fmtDate, money, todayISO } from "@/lib/hms/format";
-import type { Bill, BillItem } from "@/lib/hms/types";
+import { BILL_PAYMENT_MODES, type Bill, type BillItem } from "@/lib/hms/types";
+import { claimsForBill, payerList } from "@/lib/hms/claims";
 import {
   Badge,
   Button,
@@ -47,6 +48,8 @@ const blank = (): Partial<Bill> => ({
   paid: 0,
   due: 0,
   paymentMode: "Cash",
+  payerId: "",
+  payerName: "",
 });
 
 function BillingPage() {
@@ -80,6 +83,7 @@ function BillingPage() {
     }
     upsert<Bill>("bills", {
       ...form,
+      payerName: form.payerId ? (state.payers[form.payerId]?.name ?? form.payerName ?? "") : "",
       items: cleaned,
       totalAmount: total,
       paid: Number(form.paid || 0),
@@ -107,7 +111,7 @@ function BillingPage() {
       />
 
       <DataTable
-        columns={["Date", "Patient", "Items", "Total", "Paid", "Due", "Mode", ""]}
+        columns={["Date", "Patient", "Items", "Total", "Paid", "Due", "Mode", "Payer", ""]}
         rowCount={rows.length}
       >
         {rows.map((b) => (
@@ -123,6 +127,22 @@ function BillingPage() {
               </Badge>
             </Td>
             <Td>{b.paymentMode}</Td>
+            <Td className="whitespace-nowrap text-xs">
+              {b.payerId || b.payerName ? (
+                <>
+                  {b.payerName || state.payers[b.payerId ?? ""]?.name || "—"}
+                  {claimsForBill(state, b.id).length > 0 ? (
+                    <div>
+                      <Link to="/claims" className="text-accent underline">
+                        claim raised
+                      </Link>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-muted-foreground">Self pay</span>
+              )}
+            </Td>
             <Td className="whitespace-nowrap">
               <button
                 className="mr-2 text-muted-foreground hover:text-foreground"
@@ -228,6 +248,26 @@ function BillingPage() {
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Field label="Payer / scheme">
+            <Select
+              value={form.payerId ?? ""}
+              onChange={(e) => {
+                const payer = state.payers[e.target.value];
+                setForm((f) => ({
+                  ...f,
+                  payerId: e.target.value,
+                  payerName: payer?.name ?? "",
+                }));
+              }}
+            >
+              <option value="">Self pay / cash</option>
+              {payerList(state).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Field label="Paid amount (₹)">
             <Input
               type="number"
@@ -242,10 +282,11 @@ function BillingPage() {
               value={form.paymentMode ?? "Cash"}
               onChange={(e) => setForm((f) => ({ ...f, paymentMode: e.target.value }))}
             >
-              <option>Cash</option>
-              <option>UPI</option>
-              <option>Card</option>
-              <option>Insurance</option>
+              {BILL_PAYMENT_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
             </Select>
           </Field>
           <div className="rounded-md bg-muted px-3 py-2 text-sm">
