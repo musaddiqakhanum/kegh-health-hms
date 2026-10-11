@@ -22,6 +22,7 @@ import {
   type ServiceSection,
   type User,
 } from "@/lib/hms/types";
+import { COMMON_PROCEDURES } from "@/lib/hms/ot";
 import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/hms/ui";
 import { AdminOnly } from "@/components/hms/gate";
 
@@ -695,7 +696,12 @@ function ServiceRatesCard() {
   const [rate, setRate] = useState("");
 
   const rows = serviceRateList(state);
-  const suggestions = section === "Lab" ? COMMON_LAB_TESTS : COMMON_IMAGING_STUDIES;
+  const suggestions =
+    section === "Lab"
+      ? COMMON_LAB_TESTS
+      : section === "Imaging"
+        ? COMMON_IMAGING_STUDIES
+        : COMMON_PROCEDURES;
 
   const add = () => {
     const name = item.trim();
@@ -743,7 +749,11 @@ function ServiceRatesCard() {
           <Input
             list="service-rate-items"
             placeholder={
-              section === "Lab" ? "e.g. CBC, HbA1c…" : "e.g. USG Abdomen, X-Ray Chest PA…"
+              section === "Lab"
+                ? "e.g. CBC, HbA1c…"
+                : section === "Imaging"
+                  ? "e.g. USG Abdomen, X-Ray Chest PA…"
+                  : "e.g. Laparoscopic appendectomy…"
             }
             value={item}
             onChange={(e) => setItem(e.target.value)}
@@ -772,16 +782,24 @@ function ServiceRatesCard() {
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No rates yet — the ₹ button on completed lab / imaging orders stays inactive until the
-          price list has entries.
+          No rates yet — the ₹ button on completed lab / imaging orders and OT cases stays inactive
+          until the price list has entries.
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-md ring-1 ring-border/60">
           {rows.map((x) => (
             <li key={x.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-              <Badge tone={x.section === "Lab" ? "neutral" : "amber"}>{x.section}</Badge>
+              <Badge
+                tone={x.section === "Lab" ? "neutral" : x.section === "Imaging" ? "amber" : "green"}
+              >
+                {x.section}
+              </Badge>
               <span className="min-w-0 flex-1 font-medium text-foreground">{x.item}</span>
-              <span className="font-semibold">{money(x.rate)}</span>
+              {Number(x.rate || 0) > 0 ? (
+                <span className="font-semibold">{money(x.rate)}</span>
+              ) : (
+                <span className="text-xs font-medium text-amber-700">rate not set</span>
+              )}
               <Badge tone={x.active ? "green" : "red"}>{x.active ? "Active" : "Disabled"}</Badge>
               <Button variant="ghost" onClick={() => toggle(x)}>
                 {x.active ? "Disable" : "Enable"}
@@ -791,8 +809,10 @@ function ServiceRatesCard() {
         </ul>
       )}
       <p className="text-xs text-muted-foreground">
-        Names match order items case-insensitively. Re-adding the same name updates its price; new
-        charges use the latest active rate, bills already posted are untouched.
+        Names match order items and OT procedures case-insensitively. Re-adding the same name
+        updates its price; new charges use the latest active rate, bills already posted are
+        untouched. The OT list ships with common procedure names but no rates — set your own before
+        billing.
       </p>
     </Card>
   );

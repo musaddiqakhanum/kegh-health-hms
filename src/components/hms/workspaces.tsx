@@ -12,6 +12,7 @@ import {
   Pill,
   Receipt,
   Scan,
+  Scissors,
   ScrollText,
   ShieldCheck,
   Stethoscope,
@@ -48,6 +49,7 @@ import { bedStats } from "@/lib/hms/ipd";
 import { nursingStats, wardRounds, vitalsSummary, vitalFlags } from "@/lib/hms/nursing";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
 import { claimPending, claimQueueStats, claimTone, openClaims } from "@/lib/hms/claims";
+import { checksReady, otDayStats, otTone, surgeriesForSurgeon, surgeriesOn } from "@/lib/hms/ot";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
 import type { Appointment } from "@/lib/hms/types";
@@ -181,6 +183,7 @@ export function ReceptionWorkspace() {
   const handoverCounts = useMemo(() => handoverStats(state), [state]);
   const due = useMemo(() => dueBills(state), [state]);
   const claims = useMemo(() => claimQueueStats(state), [state]);
+  const ot = useMemo(() => otDayStats(state, today), [state, today]);
   const serving = useMemo(() => waitingQueue(state, today)[0] ?? null, [state, today]);
   const count = (s: Appointment["status"]) => day.filter((a) => a.status === s).length;
   const arrivals = useMemo(
@@ -245,6 +248,12 @@ export function ReceptionWorkspace() {
           label="Claims awaiting pre-auth"
           value={claims.preAuthPending}
           tone={claims.preAuthPending ? "amber" : undefined}
+        />
+        <WsStat
+          to="/ot"
+          label="Surgeries today"
+          value={ot.total}
+          tone={ot.inTheatre ? "amber" : undefined}
         />
         <WsStat
           to="/billing"
@@ -335,6 +344,7 @@ export function ReceptionWorkspace() {
               icon: ShieldCheck,
               hint: "Pre-auth for insured patients",
             },
+            { to: "/ot", label: "OT list", icon: Scissors, hint: "Today's theatre list" },
           ]}
         />
       </div>
@@ -358,6 +368,7 @@ export function DoctorWorkspace() {
       ).length,
     [state.prescriptions, name],
   );
+  const myTheatre = useMemo(() => surgeriesForSurgeon(state, name), [state, name]);
 
   return (
     <div className="space-y-6">
@@ -382,9 +393,56 @@ export function DoctorWorkspace() {
         <WsStat to="/appointments" label="My appointments today" value={appts.length} />
         <WsStat to="/prescriptions" label="My prescriptions today" value={rxToday} />
         <WsStat to="/visits" label="My recent patients" value={recent.length} />
+        <WsStat
+          to="/ot"
+          label="My surgeries today"
+          value={myTheatre.length}
+          tone={myTheatre.some((x) => x.status === "Scheduled") ? "amber" : undefined}
+        />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
+        <Section
+          title="My theatre list today"
+          badge={
+            <Badge tone={myTheatre.length ? "amber" : "neutral"}>
+              {myTheatre.length
+                ? `${myTheatre.length} case${myTheatre.length === 1 ? "" : "s"}`
+                : "clear"}
+            </Badge>
+          }
+        >
+          {myTheatre.length === 0 ? (
+            <EmptyRow>No operations listed for you today.</EmptyRow>
+          ) : (
+            <ul className="space-y-2">
+              {myTheatre.map((x) => (
+                <li
+                  key={x.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 ring-1 ring-border/60"
+                >
+                  <span className="text-sm font-medium text-foreground">{x.time}</span>
+                  <span className="text-sm text-muted-foreground">{x.room}</span>
+                  <Link
+                    to="/patients/$patientId"
+                    params={{ patientId: x.patientId }}
+                    className="text-sm text-accent underline"
+                  >
+                    {patientName(state, x.patientId)}
+                  </Link>
+                  <span className="text-sm text-foreground">{x.procedure}</span>
+                  <span className="ml-auto flex items-center gap-2">
+                    <Badge tone={x.checks.every((c) => c.ready) ? "green" : "amber"}>
+                      {checksReady(x)}/{x.checks.length} checks
+                    </Badge>
+                    <Badge tone={otTone(x.status)}>{x.status}</Badge>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
         <Section
           title="My OPD queue today"
           badge={<Badge tone={queue.length ? "amber" : "neutral"}>{queue.length} waiting</Badge>}
@@ -502,6 +560,7 @@ export function NursingWorkspace() {
   const { user } = useSession();
   const stats = useMemo(() => nursingStats(state), [state]);
   const round = useMemo(() => wardRounds(state), [state]);
+  const theatre = useMemo(() => surgeriesOn(state, todayISO()), [state]);
 
   return (
     <div className="space-y-6">
@@ -523,6 +582,14 @@ export function NursingWorkspace() {
           tone={stats.criticalToday ? "red" : stats.abnormalToday ? "amber" : undefined}
         />
         <WsStat to="/nursing" label="Notes today" value={stats.notesToday} />
+        <WsStat
+          to="/ot"
+          label="Theatre cases today"
+          value={theatre.length}
+          tone={
+            theatre.some((x) => x.status === "Scheduled" && !checksReady(x)) ? "amber" : undefined
+          }
+        />
       </div>
 
       <Section
@@ -589,12 +656,48 @@ export function NursingWorkspace() {
         )}
       </Section>
 
+      <Section
+        title="Theatre list today — pre-op checks"
+        badge={<Badge tone={theatre.length ? "amber" : "neutral"}>{theatre.length} cases</Badge>}
+      >
+        {theatre.length === 0 ? (
+          <EmptyRow>No operations listed today.</EmptyRow>
+        ) : (
+          <ul className="space-y-2">
+            {theatre.map((x) => (
+              <li
+                key={x.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 ring-1 ring-border/60"
+              >
+                <span className="text-sm font-medium text-foreground">{x.time}</span>
+                <span className="text-sm text-muted-foreground">{x.room}</span>
+                <Link
+                  to="/patients/$patientId"
+                  params={{ patientId: x.patientId }}
+                  className="text-sm text-accent underline"
+                >
+                  {patientName(state, x.patientId)}
+                </Link>
+                <span className="text-sm">{x.procedure}</span>
+                <span className="ml-auto flex items-center gap-2">
+                  <Badge tone={checksReady(x) === x.checks.length ? "green" : "amber"}>
+                    {checksReady(x)}/{x.checks.length} checks
+                  </Badge>
+                  <Badge tone={otTone(x.status)}>{x.status}</Badge>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       <QuickLinks
         title="Quick actions"
         links={[
           { to: "/nursing", label: "Record vitals", icon: HeartPulse, hint: "TPR chart & flags" },
           { to: "/nursing", label: "Progress notes", icon: ClipboardList, hint: "Shift entries" },
           { to: "/ipd", label: "Bed board", icon: BedDouble, hint: "Admissions and beds" },
+          { to: "/ot", label: "OT list", icon: Scissors, hint: "Pre-op checks" },
           { to: "/handover", label: "Shift handover", icon: NotebookPen, hint: "Notes for relief" },
         ]}
       />

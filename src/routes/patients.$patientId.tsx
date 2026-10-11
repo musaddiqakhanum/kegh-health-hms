@@ -10,6 +10,7 @@ import { ordersForPatient } from "@/lib/hms/laborders";
 import { imagingOrdersForPatient } from "@/lib/hms/imaging";
 import { notesForPatient } from "@/lib/hms/handover";
 import { claimPending, claimTone, claimsForPatient } from "@/lib/hms/claims";
+import { checksReady, otTone, surgeriesForPatient } from "@/lib/hms/ot";
 import {
   notesForPatient as nursingNotesForPatient,
   vitalFlags,
@@ -91,6 +92,7 @@ function Patient360() {
   const vitalsRows = useMemo(() => vitalsForPatient(state, patientId), [state, patientId]);
   const nursingRows = useMemo(() => nursingNotesForPatient(state, patientId), [state, patientId]);
   const claimRows = useMemo(() => claimsForPatient(state, patientId), [state, patientId]);
+  const surgeryRows = useMemo(() => surgeriesForPatient(state, patientId), [state, patientId]);
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -176,6 +178,15 @@ function Patient360() {
         `CLM-${c.claimNo} · ${c.payerName}`,
         `Claimed ${c.claimedAmount} · settled ${c.settledAmount}`,
         c.status,
+      ]),
+    );
+    surgeryRows.forEach((x) =>
+      rows.push([
+        "Surgery",
+        x.date,
+        `OT-${x.surgeryNo} · ${x.procedure}`,
+        `${x.room} · ${x.surgeon || ""}`,
+        x.status,
       ]),
     );
     downloadCsv(`${patient.mrn.replace(/\//g, "-")}-record.csv`, rows);
@@ -387,6 +398,43 @@ function Patient360() {
                   </p>
                 </li>
               ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Surgeries ({surgeryRows.length})
+            </h3>
+            <Link to="/ot" className="text-xs font-medium text-accent underline">
+              OT scheduling →
+            </Link>
+          </div>
+          {surgeryRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No operations on record.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {surgeryRows.slice(0, 6).map((x) => (
+                <li key={x.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">
+                    {fmtDate(x.date)} {x.time}
+                  </span>
+                  <span>{x.procedure}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {x.room} · {x.surgeon || "—"}
+                    {x.checks.length ? ` · checks ${checksReady(x)}/${x.checks.length}` : ""}
+                  </span>
+                  <span className="ml-auto">
+                    <Badge tone={otTone(x.status)}>{x.status}</Badge>
+                  </span>
+                </li>
+              ))}
+              {surgeryRows.length > 6 ? (
+                <li className="text-xs text-muted-foreground">
+                  + {surgeryRows.length - 6} more operation{surgeryRows.length - 6 === 1 ? "" : "s"}
+                </li>
+              ) : null}
             </ul>
           )}
         </Card>
