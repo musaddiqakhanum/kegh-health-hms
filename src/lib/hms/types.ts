@@ -175,16 +175,16 @@ export interface Visit {
   createdAt: number;
 }
 
-export type ServiceSection = "Lab" | "Imaging";
+export type ServiceSection = "Lab" | "Imaging" | "OT";
 
-export const SERVICE_SECTIONS: ServiceSection[] = ["Lab", "Imaging"];
+export const SERVICE_SECTIONS: ServiceSection[] = ["Lab", "Imaging", "OT"];
 
-/** One priced investigation — the rate master behind one-click order billing. */
+/** One priced investigation or procedure — the rate master behind one-click billing. */
 export interface ServiceRate {
   id: ID;
-  /** Which queue the rate belongs to. */
+  /** Which price list the rate belongs to. */
   section: ServiceSection;
-  /** Test / study name, matched case-insensitively against order items. */
+  /** Test / study / procedure name, matched case-insensitively against the source record. */
   item: string;
   /** Charge in ₹. */
   rate: number;
@@ -528,8 +528,8 @@ export const BILL_PAYMENT_MODES: string[] = [
 
 /* ------------------------------------------------- insurance / claims desk */
 
-/** How a payer is classified — drives register filters and reports. */
-export type PayerType = "Government scheme" | "Private insurer" | "TPA" | "Corporate" | "Self pay";
+/** How a payer is classified — drives register filters and reports. */ export type PayerType =
+  "Government scheme" | "Private insurer" | "TPA" | "Corporate" | "Self pay";
 
 export const PAYER_TYPES: PayerType[] = [
   "Government scheme",
@@ -692,6 +692,113 @@ export interface Claim {
    * (₹). Re-settling posts only the difference, so no double-posting.
    */
   settlementPosted: number;
+  createdAt: number;
+}
+
+/* ------------------------------------------------ operation theatre (OT) */
+
+/** Theatres a case can be booked into — free text stays possible. */
+export const OT_ROOMS: string[] = [
+  "OT 1",
+  "OT 2",
+  "OT 3",
+  "Minor OT",
+  "Emergency OT",
+  "Day-care OT",
+];
+
+/** Anaesthesia types offered on the booking form. */
+export const ANAESTHESIA_TYPES: string[] = [
+  "General",
+  "Spinal",
+  "Epidural",
+  "Regional block",
+  "Local",
+  "Sedation",
+];
+
+export type SurgeryStatus = "Scheduled" | "In theatre" | "Completed" | "Cancelled";
+
+export const SURGERY_STATUSES: SurgeryStatus[] = [
+  "Scheduled",
+  "In theatre",
+  "Completed",
+  "Cancelled",
+];
+
+export type SurgeryPriority = "Elective" | "Emergency" | "Day care";
+
+export const SURGERY_PRIORITIES: SurgeryPriority[] = ["Elective", "Emergency", "Day care"];
+
+/** The pre-op safety checklist the ward and theatre tick off. */
+export const SAFETY_CHECKS: string[] = [
+  "Consent signed",
+  "Fitness / pre-anaesthetic check",
+  "NPO since midnight",
+  "Site marked",
+  "Investigations ready",
+  "Blood arranged",
+  "Antibiotic prophylaxis",
+  "Post-op bed arranged",
+];
+
+/** One line of a surgery's safety checklist. */
+export interface OtCheck {
+  name: string;
+  ready: boolean;
+}
+
+/**
+ * One operation on the theatre list: booked into a room at a time with a
+ * planned duration, then run through Scheduled → In theatre → Completed.
+ * Team, anaesthesia and the safety checklist travel on the record so the
+ * printed slip and the day list carry everything the OT needs.
+ */
+export interface Surgery {
+  id: ID;
+  /** Running OT number, shown as OT-42. */
+  surgeryNo: number;
+  patientId: ID;
+  visitId: ID;
+  /** Linked IPD stay, when the patient was admitted. */
+  admissionId: ID;
+  /** Theatre-list date, YYYY-MM-DD. */
+  date: string;
+  /** Planned start, HH:MM. */
+  time: string;
+  /** Planned duration in minutes — drives the day timeline. */
+  durationMinutes: number;
+  /** Theatre / OT room. */
+  room: string;
+  /** Procedure being performed, e.g. "Laparoscopic appendectomy". */
+  procedure: string;
+  /** Procedure / package code quoted to the payer. */
+  code: string;
+  priority: SurgeryPriority | string;
+  /** Primary operating surgeon. */
+  surgeon: string;
+  /** Assisting surgeon / second operator. */
+  assistant: string;
+  anaesthetist: string;
+  anaesthesia: string;
+  /** Pre-operative / working diagnosis. */
+  diagnosis: string;
+  /** Scrub nurse or theatre assistant. */
+  scrubNurse: string;
+  notes: string;
+  status: SurgeryStatus;
+  checks: OtCheck[];
+  /** When the patient went in / came out / was cancelled (ms epoch). */
+  startedAt?: number | undefined;
+  completedAt?: number | undefined;
+  cancelledAt?: number | undefined;
+  cancelReason?: string | undefined;
+  /** Operative findings dictated after the case. */
+  findings?: string | undefined;
+  /** Post-op instructions / recovery notes. */
+  postOpNotes?: string | undefined;
+  /** Bill the theatre charges were posted to — guards against double-posting. */
+  chargeBillId?: ID | undefined;
   createdAt: number;
 }
 
@@ -1034,6 +1141,7 @@ export type Collection =
   | "bills"
   | "payers"
   | "claims"
+  | "surgeries"
   | "appointments"
   | "doctorSchedules"
   | "prescriptions"
@@ -1065,6 +1173,7 @@ export const COLLECTIONS: Collection[] = [
   "bills",
   "payers",
   "claims",
+  "surgeries",
   "appointments",
   "doctorSchedules",
   "prescriptions",
@@ -1096,6 +1205,7 @@ export interface HmsState {
   bills: Record<ID, Bill>;
   payers: Record<ID, Payer>;
   claims: Record<ID, Claim>;
+  surgeries: Record<ID, Surgery>;
   appointments: Record<ID, Appointment>;
   doctorSchedules: Record<ID, DoctorSchedule>;
   prescriptions: Record<ID, Prescription>;
@@ -1201,6 +1311,7 @@ export const emptyState = (): HmsState => ({
   bills: {},
   payers: {},
   claims: {},
+  surgeries: {},
   appointments: {},
   doctorSchedules: {},
   prescriptions: {},

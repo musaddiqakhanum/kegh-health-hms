@@ -16,7 +16,7 @@
 
 ## Gates to run before committing
 
-1. Run every smoke suite in `scripts/smoke-*.mjs` (all 12 suites must pass):
+1. Run every smoke suite in `scripts/smoke-*.mjs` (all 13 suites must pass):
    ```bash
    for f in scripts/smoke-*.mjs; do node "$f"; done
    ```
@@ -31,6 +31,7 @@
 
 - **Medicine catalogue seed (`INDIAN_DRUGS`)**: Editing `INDIAN_DRUGS` in `src/lib/hms/indian-drugs.ts` requires bumping `DRUG_SEED_VERSION` in `src/lib/hms/medcatalog.ts`. Otherwise, already-seeded devices keep their existing `kegh-hms-drug-seed-version` `localStorage` flag and never receive the top-up. Seeding only merges missing deterministic `seed-med-<slug>` rows and never overwrites device-added catalogue entries.
 - **Payer seed (`INDIAN_PAYERS`)**: Editing `INDIAN_PAYERS` in `src/lib/hms/indian-payers.ts` requires bumping `PAYER_SEED_VERSION` in `src/lib/hms/claims.ts` for the same reason as the drug seed — already-seeded devices hold `kegh-hms-payer-seed-version` in `localStorage` and would otherwise never receive the top-up. Seeding merges missing `seed-payer-<code>` rows only, and skips any payer whose name the hospital already entered by hand.
+- **OT procedure seed (`COMMON_PROCEDURES`)**: The OT price list ships the procedure names (deterministic `seed-ot-<slug>` rows, `kegh-hms-ot-seed-version`) with every rate at ₹0 — a hospital's own pricing is the only truth, so nothing is ever billed from a seeded number. Editing the list means bumping `OT_SEED_VERSION` in `src/lib/hms/ot.ts`; a procedure name the hospital already priced is never duplicated, and the OT page lists whatever is still unpriced before any theatre charge can be posted.
 - **Claim settlements**: A settlement posts to the linked bill as a *payment* (`paid` up, `due` down, clamped at `totalAmount`) under the payer's mode — never as a bill line, so bill totals stay what the hospital charged. The claim keeps `settlementPosted`, and only the delta (`settledAmount − settlementPosted`) is posted, so re-saving a corrected settlement can never pay the same bill twice. `claimPending()` treats settled and rejected claims as owing nothing; the pending figure of an unsettled claim follows `approvedAmount` once one is on file, else `claimedAmount`.
 - **Attendance module**: The staff attendance module is deliberately absent (the hospital tracks attendance in an external app) — do not reintroduce it.
 - **Current patient & workspace terminology**: The active/current patient selection is device-local (`kegh-hms-current-patient` in `localStorage`). In UI copy and navigation, "My workspace" refers to the signed-in staff member's role home (Reception, Doctor, Lab, Pharmacy, Billing), not the Admin dashboard.

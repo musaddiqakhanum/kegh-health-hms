@@ -84,3 +84,12 @@
       (delta-based, so re-saving never double-posts), payer on bills, claim register CSV +
       printable claim sheet, Reports → Insurance claims, Patient 360 claims card and
       Billing / Reception workspace tiles
+- [x] OT (operation theatre) scheduling — day-wise theatre list with a room timeline
+      (planned start + duration, "now" marker, red lines for cancelled cases), booking form
+      with patient / IPD stay / bill links, surgical team (surgeon, assistant, anaesthetist,
+      anaesthesia, scrub nurse), procedure + package code, priority, pre-op safety checklist,
+      Scheduled → In theatre → Completed / Cancelled with timestamps, operative findings and
+      post-op dictation, printable day list and case slip, OT price list in Settings (seeded
+      procedure names, rates left for the hospital to set) with one-click theatre charges to
+      the patient's bill, Reports → Operations (OT), Patient 360 surgeries card and doctor /
+      nursing / reception workspace theatre lists

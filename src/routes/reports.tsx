@@ -20,6 +20,7 @@ import {
 import { fmtDate, money, todayISO } from "@/lib/hms/format";
 import { stayDays } from "@/lib/hms/ipd";
 import { claimPending, claimStats } from "@/lib/hms/claims";
+import { plannedMinutes, surgeryStats } from "@/lib/hms/ot";
 import { BILL_PAYMENT_MODES } from "@/lib/hms/types";
 import { currentPeriod, shortPeriodLabel } from "@/lib/hms/payroll";
 import { downloadCsv } from "@/lib/hms/csv";
@@ -55,7 +56,8 @@ type Section =
   | "admissions"
   | "labOrders"
   | "imagingOrders"
-  | "claims";
+  | "claims"
+  | "surgeries";
 const SECTION_LABELS: Record<Section, string> = {
   labs: "Laboratory",
   bills: "Billing",
@@ -67,6 +69,7 @@ const SECTION_LABELS: Record<Section, string> = {
   labOrders: "Lab orders",
   imagingOrders: "Imaging orders",
   claims: "Insurance claims",
+  surgeries: "Operations (OT)",
 };
 
 function ReportsPage() {
@@ -289,6 +292,36 @@ function ReportsPage() {
             "Avg scan delay (days)",
             delays.length ? (delays.reduce((s, d) => s + d, 0) / delays.length).toFixed(1) : "—",
           ],
+        ],
+      };
+    }
+    if (section === "surgeries") {
+      const r = rows as unknown as (typeof state.surgeries)[string][];
+      const stats = surgeryStats(r);
+      return {
+        head: ["Date", "OT no", "Patient", "Procedure", "Room", "Surgeon", "Priority", "Status"],
+        body: r.map((x) => [
+          fmtDate(x.date),
+          `OT-${x.surgeryNo}`,
+          name(x.patientId),
+          x.procedure,
+          x.room,
+          x.surgeon || "—",
+          x.priority,
+          x.status,
+        ]),
+        summary: [
+          ["Cases", String(stats.total)],
+          ["Completed", String(stats.completed)],
+          ["Cancelled", String(stats.cancelled)],
+          ["Emergency", String(stats.emergency)],
+          ["Theatre hours", (stats.plannedMinutes / 60).toFixed(1)],
+          [
+            "Avg case (min)",
+            stats.total ? String(Math.round(plannedMinutes(r) / stats.total)) : "—",
+          ],
+          ["Completion rate", `${stats.completionRate}%`],
+          ["Cancellation rate", `${stats.cancellationRate}%`],
         ],
       };
     }

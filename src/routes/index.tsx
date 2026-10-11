@@ -7,6 +7,7 @@ import { fmtDate, isSameDay, money } from "@/lib/hms/format";
 import { getStoredToken } from "@/lib/hms/drive";
 import { driveScopeFor } from "@/lib/hms/sync";
 import { claimQueueStats } from "@/lib/hms/claims";
+import { otDayStats } from "@/lib/hms/ot";
 import { Button, Card, DataTable, PageHeader, Td } from "@/components/hms/ui";
 import { PrintOverlay } from "@/components/hms/PrintOverlay";
 
@@ -39,6 +40,7 @@ function Dashboard() {
   const [dayEnd, setDayEnd] = useState(false);
   const stats = useMemo(() => dashboardStats(state), [state]);
   const claims = useMemo(() => claimQueueStats(state), [state]);
+  const ot = useMemo(() => otDayStats(state), [state]);
   const recent = useMemo(
     () => sortByDateDesc(Object.values(state.visits)).slice(0, 6),
     [state.visits],
