@@ -736,6 +736,88 @@ export interface PayrollEntry {
   createdAt: number;
 }
 
+/* ------------------------------------------------------------- nursing */
+
+/** Duty shifts a ward hands over between — stamped on vitals and notes. */
+export const NURSING_SHIFTS = ["Morning", "Evening", "Night"] as const;
+export type NursingShift = (typeof NURSING_SHIFTS)[number];
+
+/** How far a single reading sits outside its normal band. */
+export type VitalSeverity = "normal" | "abnormal" | "critical";
+
+export const VITAL_SEVERITIES: VitalSeverity[] = ["normal", "abnormal", "critical"];
+
+/**
+ * One set of observations taken at the bedside (or in triage).
+ * Temperatures are recorded in °F, the unit Indian wards chart in.
+ * Blank optional numbers mean "not taken this round" (pain 0 is a real score).
+ */
+export interface Vitals {
+  id: ID;
+  patientId: ID;
+  /** Linked OPD / IPD visit, when one exists. */
+  visitId: ID;
+  /** Linked IPD stay, when the reading was taken on a ward. */
+  admissionId: ID;
+  /** Observation date, YYYY-MM-DD. */
+  date: string;
+  /** Clock time, HH:MM. */
+  time: string;
+  shift: NursingShift;
+  /** Body temperature, °F. */
+  temperature: number;
+  /** Pulse, beats per minute. */
+  pulse: number;
+  /** Respiratory rate, breaths per minute. */
+  respRate: number;
+  bpSystolic: number;
+  bpDiastolic: number;
+  /** Oxygen saturation, %. */
+  spo2: number;
+  /** 0–10 pain score. */
+  painScore?: number | undefined;
+  /** Weight in kg — tracked, never flagged. */
+  weightKg: number;
+  /** Oral + IV fluids in, ml. */
+  intakeMl: number;
+  /** Urine + drain + vomitus out, ml. */
+  outputMl: number;
+  /** Who took the reading — session display name or device name. */
+  recordedBy: string;
+  notes: string;
+  createdAt: number;
+}
+
+/** Quick picks for the category of a nursing note. */
+export const NURSING_NOTE_CATEGORIES: string[] = [
+  "Progress note",
+  "Doctor round",
+  "Medication given",
+  "Intake / output",
+  "Wound / dressing",
+  "Family communication",
+  "Incident",
+  "Other",
+];
+
+/** A note the ward leaves on a patient's chart. */
+export interface NursingNote {
+  id: ID;
+  patientId: ID;
+  visitId: ID;
+  admissionId: ID;
+  /** Date the note was written, YYYY-MM-DD. */
+  date: string;
+  /** Clock time, HH:MM. */
+  time: string;
+  shift: NursingShift;
+  category: string;
+  /** Nurse / attendant who wrote it. */
+  author: string;
+  text: string;
+  createdAt: number;
+}
+
 export type AuditAction = "create" | "update" | "delete" | "login" | "logout";
 
 /** Lightweight audit trail entry for writes made on any device. */
@@ -774,6 +856,8 @@ export type Collection =
   | "staff"
   | "payrolls"
   | "users"
+  | "vitals"
+  | "nursingNotes"
   | "auditLogs";
 
 /** Every synced collection — merge, backup and import all iterate this list. */
@@ -801,6 +885,8 @@ export const COLLECTIONS: Collection[] = [
   "staff",
   "payrolls",
   "users",
+  "vitals",
+  "nursingNotes",
   "auditLogs",
 ];
 
@@ -828,6 +914,8 @@ export interface HmsState {
   staff: Record<ID, Staff>;
   payrolls: Record<ID, PayrollEntry>;
   users: Record<ID, User>;
+  vitals: Record<ID, Vitals>;
+  nursingNotes: Record<ID, NursingNote>;
   auditLogs: Record<ID, AuditLog>;
   /** operation log: `${collection}:${id}` -> last write timestamp (ms) */
   ops: Record<string, number>;
@@ -864,7 +952,7 @@ export interface User {
   createdAt: number;
 }
 
-export type Role = "Admin" | "Reception" | "Doctor" | "Lab" | "Pharmacy" | "Billing";
+export type Role = "Admin" | "Reception" | "Doctor" | "Nursing" | "Lab" | "Pharmacy" | "Billing";
 
 export interface Settings {
   hospitalName: string;
@@ -929,6 +1017,8 @@ export const emptyState = (): HmsState => ({
   staff: {},
   payrolls: {},
   users: {},
+  vitals: {},
+  nursingNotes: {},
   auditLogs: {},
   ops: {},
   deleted: {},

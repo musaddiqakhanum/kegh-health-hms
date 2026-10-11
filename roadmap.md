@@ -55,6 +55,11 @@
       admissions tab with one-click discharge now
 - [x] Current patient everywhere — header chip plus every patient picker
       pre-selecting the last chosen patient across screens
+- [x] Nursing station — a dedicated Nursing role and workspace, ward round
+      dashboard, bedside vitals / TPR chart (temperature, pulse, respiration,
+      BP, SpO₂, pain, weight, intake/output), adult reference flags and
+      nursing progress notes tied to IPD stays. Printable patient flow sheet,
+      CSV, IPD nursing tab and Patient 360 card; records sync with Drive.
 - [x] Shared medicine catalogue — CSV/paste import + quick add on the Pharmacy
       page; prescription & stock name fields autocomplete from it; doctor gets
       form chips (Syrup / Drops / Injection / Suspension…) when names collide

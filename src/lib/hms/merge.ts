@@ -17,8 +17,9 @@ export function mergeStates(a: HmsState, b: HmsState): HmsState {
     const ids = new Set([...Object.keys(a[c] ?? {}), ...Object.keys(b[c] ?? {})]);
     for (const id of ids) {
       const key = `${c}:${id}`;
-      const ra = (a[c] as Record<string, { createdAt?: number }>)[id];
-      const rb = (b[c] as Record<string, { createdAt?: number }>)[id];
+      // Older device backups may not have collections added in newer releases.
+      const ra = ((a[c] ?? {}) as Record<string, { createdAt?: number }>)[id];
+      const rb = ((b[c] ?? {}) as Record<string, { createdAt?: number }>)[id];
       const ta = ra ? (a.ops?.[key] ?? ra.createdAt ?? 0) : -1;
       const tb = rb ? (b.ops?.[key] ?? rb.createdAt ?? 0) : -1;
       const winner = tb > ta ? rb : ra;

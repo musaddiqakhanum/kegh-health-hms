@@ -9,6 +9,12 @@ import { admissionsForPatient } from "@/lib/hms/ipd";
 import { ordersForPatient } from "@/lib/hms/laborders";
 import { imagingOrdersForPatient } from "@/lib/hms/imaging";
 import { notesForPatient } from "@/lib/hms/handover";
+import {
+  notesForPatient as nursingNotesForPatient,
+  vitalFlags,
+  vitalsForPatient,
+  vitalsSummary,
+} from "@/lib/hms/nursing";
 import { downloadCsv } from "@/lib/hms/csv";
 import { formatAbhaNumber } from "@/lib/abdm/healthId";
 import type { AppointmentStatus, Patient } from "@/lib/hms/types";
@@ -81,6 +87,8 @@ function Patient360() {
     [state, patientId],
   );
   const handoverRows = useMemo(() => notesForPatient(state, patientId), [state, patientId]);
+  const vitalsRows = useMemo(() => vitalsForPatient(state, patientId), [state, patientId]);
+  const nursingRows = useMemo(() => nursingNotesForPatient(state, patientId), [state, patientId]);
 
   const totals = {
     billed: bills.reduce((s, b) => s + Number(b.totalAmount || 0), 0),
@@ -140,6 +148,20 @@ function Patient360() {
         n.text.replace(/\s+/g, " ").slice(0, 120),
         n.author,
       ]),
+    );
+    vitalsRows.forEach((v) =>
+      rows.push([
+        "Vitals",
+        v.date,
+        `${v.time} · ${v.shift}`,
+        vitalsSummary(v),
+        vitalFlags(v)
+          .map((f) => `${f.label} ${f.value} (${f.severity})`)
+          .join("; ") || v.recordedBy,
+      ]),
+    );
+    nursingRows.forEach((n) =>
+      rows.push(["Nursing note", n.date, n.category, n.text.replace(/\s+/g, " "), n.author]),
     );
     pharms.forEach((p) =>
       rows.push(["Pharmacy", p.date, p.medication, `${p.qty} x ${p.rate}`, p.qty * p.rate]),
@@ -394,6 +416,72 @@ function Patient360() {
                 </li>
               ) : null}
             </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Nursing chart ({vitalsRows.length} sets · {nursingRows.length} notes)
+            </h3>
+            <Link
+              to="/nursing"
+              search={{ patient: patientId, admission: "", tab: "vitals" }}
+              className="text-xs font-medium text-accent underline"
+            >
+              Full TPR chart →
+            </Link>
+          </div>
+          {vitalsRows.length === 0 && nursingRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No vitals or nursing notes charted.</p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {vitalsRows.length ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Latest observations
+                  </p>
+                  <ul className="space-y-1.5">
+                    {vitalsRows.slice(0, 4).map((v) => (
+                      <li key={v.id} className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {fmtDate(v.date)} {v.time}
+                        </span>
+                        <span>{vitalsSummary(v)}</span>
+                        {vitalFlags(v).map((f) => (
+                          <Badge key={f.key} tone={f.severity === "critical" ? "red" : "amber"}>
+                            {f.label} {f.value}
+                          </Badge>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {nursingRows.length ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Recent nursing notes
+                  </p>
+                  <ul className="space-y-1.5">
+                    {nursingRows.slice(0, 3).map((n) => (
+                      <li key={n.id}>
+                        <span className="font-medium">
+                          {fmtDate(n.date)} {n.time}
+                        </span>
+                        <Badge tone={n.category === "Incident" ? "red" : "neutral"}>
+                          {n.category}
+                        </Badge>
+                        <span className="ml-1 text-muted-foreground">
+                          {n.text.length > 100 ? `${n.text.slice(0, 100)}…` : n.text}
+                          {n.author ? ` — ${n.author}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           )}
         </Card>
 
@@ -706,6 +794,60 @@ function Patient360() {
                 <td colSpan={5}>No appointments booked.</td>
               </tr>
             ) : null}
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 font-semibold">Nursing — vitals / TPR</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date / time</th>
+              <th>Shift</th>
+              <th>Vitals</th>
+              <th>Flags</th>
+              <th>Recorded by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vitalsRows.map((v) => (
+              <tr key={v.id}>
+                <td>
+                  {fmtDate(v.date)} {v.time}
+                </td>
+                <td>{v.shift}</td>
+                <td>{vitalsSummary(v)}</td>
+                <td>
+                  {vitalFlags(v)
+                    .map((f) => `${f.label} ${f.value} (${f.severity})`)
+                    .join(", ") || "—"}
+                </td>
+                <td>{v.recordedBy || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 font-semibold">Nursing notes</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date / time</th>
+              <th>Category</th>
+              <th>Note</th>
+              <th>Author</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nursingRows.map((n) => (
+              <tr key={n.id}>
+                <td>
+                  {fmtDate(n.date)} {n.time}
+                </td>
+                <td>{n.category}</td>
+                <td>{n.text}</td>
+                <td>{n.author || "—"}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
 

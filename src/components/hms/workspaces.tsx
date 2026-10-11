@@ -6,6 +6,7 @@ import {
   ClipboardList,
   FlaskConical,
   IndianRupee,
+  HeartPulse,
   ListOrdered,
   NotebookPen,
   Pill,
@@ -43,6 +44,7 @@ import { handoverStats } from "@/lib/hms/handover";
 import { imagingQueueStats, openImagingOrders } from "@/lib/hms/imaging";
 import { expiryStatus, medStockRows } from "@/lib/hms/inventory";
 import { bedStats } from "@/lib/hms/ipd";
+import { nursingStats, wardRounds, vitalsSummary, vitalFlags } from "@/lib/hms/nursing";
 import { openOrders, orderQueueStats } from "@/lib/hms/laborders";
 import { navForRole } from "./nav";
 import { Badge, Button, Card, DataTable, PageHeader, Td } from "./ui";
@@ -472,6 +474,113 @@ export function DoctorWorkspace() {
           { to: "/ipd", label: "IPD & admissions", icon: BedDouble, hint: "Admit a patient" },
           { to: "/handover", label: "Shift handover", icon: NotebookPen, hint: "Notes for relief" },
           { to: "/radiology", label: "Radiology", icon: Scan, hint: "Studies and impressions" },
+        ]}
+      />
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- nursing */
+
+export function NursingWorkspace() {
+  const { state } = useHms();
+  const { user } = useSession();
+  const stats = useMemo(() => nursingStats(state), [state]);
+  const round = useMemo(() => wardRounds(state), [state]);
+
+  return (
+    <div className="space-y-6">
+      <WsHeader title="Ward rounds" person={user?.displayName} extra="Nursing workspace" />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <WsStat to="/ipd" label="In-patients" value={stats.admitted} />
+        <WsStat
+          to="/nursing"
+          label="Rounds due today"
+          value={stats.dueToday}
+          tone={stats.dueToday ? "amber" : "green"}
+        />
+        <WsStat to="/nursing" label="Readings today" value={stats.readingsToday} />
+        <WsStat
+          to="/nursing"
+          label="Patients flagged today"
+          value={stats.abnormalToday}
+          tone={stats.criticalToday ? "red" : stats.abnormalToday ? "amber" : undefined}
+        />
+        <WsStat to="/nursing" label="Notes today" value={stats.notesToday} />
+      </div>
+
+      <Section
+        title="Current ward round"
+        badge={<Badge tone={stats.dueToday ? "amber" : "green"}>{stats.dueToday} due</Badge>}
+      >
+        {round.length === 0 ? (
+          <EmptyRow>
+            No in-patients right now — use Nursing Station to chart an OPD patient.
+          </EmptyRow>
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {round.slice(0, 10).map((r) => {
+              const flags = r.last ? vitalFlags(r.last) : [];
+              return (
+                <li key={r.admission.id} className="rounded-lg bg-card p-3 ring-1 ring-border/60">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Link
+                      to="/patients/$patientId"
+                      params={{ patientId: r.admission.patientId }}
+                      className="font-medium text-accent underline"
+                    >
+                      {r.patient?.name ?? "—"}
+                    </Link>
+                    <span className="text-xs text-muted-foreground">
+                      {r.bed ? `${r.bed.ward} · ${r.bed.label}` : "No bed"}
+                    </span>
+                    <span className="ml-auto">
+                      <Badge tone={r.today ? "green" : "amber"}>
+                        {r.today ? `charted ${r.today.time}` : "due today"}
+                      </Badge>
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Last:{" "}
+                    {r.last
+                      ? `${fmtDate(r.last.date)} ${r.last.time} · ${vitalsSummary(r.last)}`
+                      : "no observations"}
+                  </p>
+                  {flags.length ? (
+                    <p className="mt-1 flex flex-wrap gap-1">
+                      {flags.map((f) => (
+                        <Badge key={f.key} tone={f.severity === "critical" ? "red" : "amber"}>
+                          {f.label} {f.value}
+                        </Badge>
+                      ))}
+                    </p>
+                  ) : null}
+                  <Link
+                    to="/nursing"
+                    search={{
+                      patient: r.admission.patientId,
+                      admission: r.admission.id,
+                      tab: "vitals",
+                    }}
+                    className="mt-2 inline-block text-xs font-medium text-accent underline"
+                  >
+                    Open ward chart →
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
+
+      <QuickLinks
+        title="Quick actions"
+        links={[
+          { to: "/nursing", label: "Record vitals", icon: HeartPulse, hint: "TPR chart & flags" },
+          { to: "/nursing", label: "Progress notes", icon: ClipboardList, hint: "Shift entries" },
+          { to: "/ipd", label: "Bed board", icon: BedDouble, hint: "Admissions and beds" },
+          { to: "/handover", label: "Shift handover", icon: NotebookPen, hint: "Notes for relief" },
         ]}
       />
     </div>

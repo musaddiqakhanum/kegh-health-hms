@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { useSession } from "@/lib/hms/useSession";
 import { fmtDate, money, todayISO } from "@/lib/hms/format";
+import { vitalFlags, vitalsSummary, wardRounds } from "@/lib/hms/nursing";
 import { downloadCsv } from "@/lib/hms/csv";
 import { WARDS, type Admission, type Bed, type Bill, type Visit } from "@/lib/hms/types";
 import {
@@ -68,7 +69,7 @@ export const Route = createFileRoute("/ipd")({
   component: IpdPage,
 });
 
-type Tab = "board" | "admissions" | "beds";
+type Tab = "board" | "admissions" | "beds" | "nursing";
 
 function hhmmNow(): string {
   const d = new Date();
@@ -98,6 +99,7 @@ function IpdPage() {
             ["board", "Bed board"],
             ["admissions", `Admissions (${active.length})`],
             ["beds", "Beds & wards"],
+            ["nursing", "Nursing round"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -118,6 +120,89 @@ function IpdPage() {
       {tab === "board" ? <BoardTab /> : null}
       {tab === "admissions" ? <AdmissionsTab /> : null}
       {tab === "beds" ? <BedsTab /> : null}
+      {tab === "nursing" ? <NursingTab /> : null}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------- nursing round */
+
+function NursingTab() {
+  const { state } = useHms();
+  const rows = useMemo(() => wardRounds(state), [state]);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Latest observations for each occupied bed — due today means no vitals have been charted
+          yet.
+        </p>
+        <Link
+          to="/nursing"
+          search={{ patient: "", admission: "", tab: "rounds" }}
+          className="text-sm font-medium text-accent underline"
+        >
+          Open Nursing Station →
+        </Link>
+      </div>
+      <DataTable
+        columns={["Ward · bed", "Patient", "Round", "Last vitals", "Flags", ""]}
+        rowCount={rows.length}
+        empty="Nobody admitted right now — the ward round is clear."
+      >
+        {rows.map((r) => (
+          <tr key={r.admission.id}>
+            <Td className="whitespace-nowrap">{r.bed ? `${r.bed.ward} · ${r.bed.label}` : "—"}</Td>
+            <Td>
+              <Link
+                to="/patients/$patientId"
+                params={{ patientId: r.admission.patientId }}
+                className="font-medium text-accent underline"
+              >
+                {r.patient?.name ?? "—"}
+              </Link>
+              <div className="text-xs text-muted-foreground">{r.patient?.mrn ?? ""}</div>
+            </Td>
+            <Td>
+              <Badge tone={r.today ? "green" : "amber"}>
+                {r.today ? `charted ${r.today.time}` : "due today"}
+              </Badge>
+            </Td>
+            <Td>
+              {r.last ? vitalsSummary(r.last) : "Not charted"}
+              {r.last ? (
+                <div className="text-xs text-muted-foreground">
+                  {fmtDate(r.last.date)} {r.last.time}
+                </div>
+              ) : null}
+            </Td>
+            <Td>
+              <span className="flex flex-wrap gap-1">
+                {r.last && vitalFlags(r.last).length
+                  ? vitalFlags(r.last).map((f) => (
+                      <Badge key={f.key} tone={f.severity === "critical" ? "red" : "amber"}>
+                        {f.label} {f.value}
+                      </Badge>
+                    ))
+                  : "—"}
+              </span>
+            </Td>
+            <Td>
+              <Link
+                to="/nursing"
+                search={{
+                  patient: r.admission.patientId,
+                  admission: r.admission.id,
+                  tab: "vitals",
+                }}
+                className="text-xs font-medium text-accent underline"
+              >
+                TPR chart →
+              </Link>
+            </Td>
+          </tr>
+        ))}
+      </DataTable>
     </div>
   );
 }
