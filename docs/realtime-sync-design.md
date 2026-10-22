@@ -1,6 +1,6 @@
 # Real-time sync — design (draft)
 
-Status: **draft, decisions pending**. No server code exists yet.
+Status: **phase 1 in progress.** Decisions 1–4 are settled (see below). The sync core and its tests exist; the Durable Object wrapper and transport do not yet.
 
 ## Goal
 
@@ -29,13 +29,18 @@ The model is already per-record and timestamped, so the server can speak the sam
 - **Outbox on the device:** local writes are queued in IndexedDB and retried until acknowledged. Duplicates are harmless because each change has a `(deviceId, seq)` pair and writes are idempotent.
 - **Conflicts:** same-record edits from two devices are merged by timestamp as today. A conflict is **flagged** for review rather than silently overwritten (see decision 3).
 
-## Decisions needed
+## Decisions
 
-1. **Where patient data lives.** Hosting patient records on Cloudflare means a data-protection review and a choice of region. *Default if no answer: stop and ask before any patient data leaves devices.*
-2. **Hosting.** Durable Objects on the existing Cloudflare account (fits the Worker deploy target; limits and pricing still to be checked), or a managed Postgres with a realtime layer. *Default: Durable Objects.*
-3. **Conflict policy.** (a) newest wins, log the other silently; (b) newest wins, show a warning and keep the other version for review. *Default: (b) for clinical collections, (a) for settings and counters.*
-4. **Google Drive.** Keep as an optional backup, or remove once real-time is live. *Default: keep as backup until the server has run in production for a while.*
-5. **Users and passwords.** The `users` collection holds PBKDF2 hashes. Options: sync hashes to the server (accounts work on any device), or keep accounts local and only sync clinical data. *Default: sync hashes, since staff need to log in on any device, and the server verifies logins.*
+Settled by the team:
+
+1. **Where patient data lives:** Cloudflare, any region. *A data-protection review is still required before real patient data is stored.*
+2. **Hosting:** Cloudflare Durable Objects, one room per hospital.
+3. **Conflict policy:** warn and keep. The newer version wins (ties broken by device id), and the other is kept in the conflicts list for review.
+4. **Google Drive:** kept as an optional backup.
+
+Still open (default applies until changed):
+
+5. **Users and passwords.** The `users` collection holds PBKDF2 hashes. *Default: sync hashes so staff can log in on any device, with the server verifying logins.*
 
 ## Data that needs special handling
 
@@ -46,7 +51,8 @@ The model is already per-record and timestamped, so the server can speak the sam
 
 ## Phased plan
 
-1. **Server skeleton:** Durable Object room, WebSocket endpoint, change log with sequence numbers, and a test harness that simulates devices.
+1. **Sync core (done):** `src/lib/hms/sync-core.ts` holds the sequenced room log, idempotent submit, conflict flagging, the device outbox, and per-record convergence. `scripts/smoke-realtime.mjs` covers these, including a seeded random run with duplicates and out-of-order delivery. A deliberate break of the per-record ordering rule is caught by the suite.
+1b. **Server skeleton:** Durable Object room wrapping `RoomLog`, WebSocket endpoint, and deployment checks on the Nitro Cloudflare build.
 2. **Device transport:** outbox, reconnect with catch-up, and status in the sidebar footer (online / syncing / offline).
 3. **Conflict flagging:** a review list in the app for flagged records.
 4. **Auth:** server-side staff verification and role checks on every change.
