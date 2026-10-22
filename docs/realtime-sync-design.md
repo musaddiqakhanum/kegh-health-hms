@@ -1,6 +1,6 @@
 # Real-time sync — design (draft)
 
-Status: **phase 1 in progress.** Decisions 1–4 are settled (see below). The sync core and its tests exist; the Durable Object wrapper and transport do not yet.
+Status: **phase 1b in progress.** Decisions 1–4 are settled (see below). The sync core and its tests exist. The room (Durable Object) and wire protocol exist in `sync-worker/` and `src/lib/hms/sync-protocol.ts`, and pass local checks. Device transport is not yet wired into the app.
 
 ## Goal
 
@@ -52,7 +52,7 @@ Still open (default applies until changed):
 ## Phased plan
 
 1. **Sync core (done):** `src/lib/hms/sync-core.ts` holds the sequenced room log, idempotent submit, conflict flagging, the device outbox, and per-record convergence. `scripts/smoke-realtime.mjs` covers these, including a seeded random run with duplicates and out-of-order delivery. A deliberate break of the per-record ordering rule is caught by the suite.
-1b. **Server skeleton:** Durable Object room wrapping `RoomLog`, WebSocket endpoint, and deployment checks on the Nitro Cloudflare build.
+1b. **Server skeleton (in progress):** Durable Object room wrapping `RoomLog`, WebSocket endpoint, and wire-protocol checks. The room is a separate Worker in `sync-worker/`, not part of the Nitro app build. Nitro's `cloudflare-durable` preset only generates a generic `$DurableObject` class, and changing presets would alter the managed build. The app will connect to the room by full URL in phase 2. Local checks: `sync-worker/test/room-check.mjs` (live `wrangler dev`, including restart persistence).
 2. **Device transport:** outbox, reconnect with catch-up, and status in the sidebar footer (online / syncing / offline).
 3. **Conflict flagging:** a review list in the app for flagged records.
 4. **Auth:** server-side staff verification and role checks on every change.

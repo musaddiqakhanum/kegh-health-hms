@@ -78,6 +78,32 @@ export class RoomLog {
   private seen = new Map<string, number>(); // "deviceId#devSeq" -> seq
   readonly conflicts: Conflict[] = [];
 
+  /**
+   * `onAccept` is called once for every change the room accepts (including
+   * conflicts), before the result is returned. Use it to persist the change.
+   */
+  private onAccept: ((seq: number, change: Change) => void) | undefined;
+
+  constructor(onAccept?: (seq: number, change: Change) => void) {
+    this.onAccept = onAccept;
+  }
+
+  /**
+   * Rebuild a room from its persisted accepted changes, in the order they were
+   * accepted. Replay is deterministic, so sequence numbers, versions and
+   * conflicts come back exactly as they were. The hook is attached only after
+   * replay, so nothing is written twice.
+   */
+  static restore(
+    acceptedInOrder: Change[],
+    onAccept?: (seq: number, change: Change) => void,
+  ): RoomLog {
+    const room = new RoomLog();
+    for (const change of acceptedInOrder) room.submit(change);
+    room.onAccept = onAccept;
+    return room;
+  }
+
   submit(change: Change): SubmitResult {
     const dedupe = `${change.deviceId}#${change.devSeq}`;
     const prior = this.seen.get(dedupe);
@@ -85,6 +111,7 @@ export class RoomLog {
 
     const seq = ++this.seqCounter;
     this.seen.set(dedupe, seq);
+    this.onAccept?.(seq, change);
     const incoming: Version = {
       key: change.key,
       ts: change.ts,

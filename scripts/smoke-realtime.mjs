@@ -14,6 +14,7 @@ try {
     [
       "tsc",
       "src/lib/hms/sync-core.ts",
+      "src/lib/hms/sync-protocol.ts",
       "--outDir",
       dir,
       "--rootDir",
@@ -25,6 +26,10 @@ try {
       "--moduleResolution",
       "node",
       "--skipLibCheck",
+      "--strict",
+      "--noUncheckedIndexedAccess",
+      "--exactOptionalPropertyTypes",
+      "--noPropertyAccessFromIndexSignature",
     ],
     { cwd: process.cwd(), stdio: "pipe" },
   );
@@ -32,6 +37,7 @@ try {
   const { createRequire } = await import("node:module");
   const require = createRequire(pathToFileURL(join(dir, "index.js")).href);
   const { RoomLog, DeviceSync } = require(join(dir, "lib/hms/sync-core.js"));
+  const { parseClientMessage, MAX_FRAME_BYTES } = require(join(dir, "lib/hms/sync-protocol.js"));
 
   let failures = 0;
   const check = (name, cond) => {
@@ -270,6 +276,108 @@ try {
     check(
       "every device cursor reached the room log head",
       devices.every((d) => d.cursor === room.lastSeq),
+    );
+  }
+
+  // ---- persistence: accept hook and deterministic restore ---------------
+  {
+    const persisted = [];
+    const room = new RoomLog((seq, change) => persisted.push({ seq, change }));
+    const a = new DeviceSync("A");
+    const b = new DeviceSync("B");
+    const seed = a.write("patients:q1", { v: 1 }, 1000);
+    room.submit(seed);
+    const dup = room.submit({ ...seed });
+    check("retries are not persisted twice", persisted.length === 1 && dup.outcome === "duplicate");
+    b.receive(room.since(0)[0]);
+    room.submit(a.write("patients:q1", { v: 2 }, 2000));
+    room.submit(b.write("patients:q1", { v: 3 }, 1500)); // stale base -> conflict, still persisted
+    check("conflicts are persisted too", persisted.length === 3 && room.conflicts.length === 1);
+
+    const restored = RoomLog.restore(persisted.map((p) => p.change));
+    check("restore gives the same head sequence", restored.lastSeq === room.lastSeq);
+    check(
+      "restore gives the same current versions",
+      JSON.stringify(restored.get("patients:q1")) === JSON.stringify(room.get("patients:q1")),
+    );
+    check(
+      "restore gives the same conflicts",
+      JSON.stringify(restored.conflicts) === JSON.stringify(room.conflicts),
+    );
+    check("restore does not re-persist", persisted.length === 3);
+    const later = restored.submit(a.write("patients:q1", { v: 4 }, 3000));
+    check("a restored room continues the sequence", later.seq === room.lastSeq + 1);
+  }
+
+  // ---- wire protocol: valid and invalid frames ---------------------------
+  {
+    const ok = (t) => parseClientMessage(t).ok === true;
+    const bad = (t) => parseClientMessage(t).ok === false;
+    const change = {
+      deviceId: "A",
+      devSeq: 1,
+      key: "patients:p1",
+      ts: 1000,
+      baseTs: null,
+      value: { name: "x" },
+    };
+    check(
+      "hello frame is accepted",
+      ok(JSON.stringify({ type: "hello", deviceId: "A", cursor: 0 })),
+    );
+    check("submit frame is accepted", ok(JSON.stringify({ type: "submit", change })));
+    check(
+      "delete (null value) is accepted",
+      ok(JSON.stringify({ type: "submit", change: { ...change, value: null } })),
+    );
+    check("ping frame is accepted", ok(JSON.stringify({ type: "ping" })));
+    check("non-JSON is rejected", bad("{nope"));
+    check("missing type is rejected", bad(JSON.stringify({ deviceId: "A" })));
+    check("unknown type is rejected", bad(JSON.stringify({ type: "drop-table" })));
+    check(
+      "unknown collection is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, key: "secrets:1" } })),
+    );
+    check(
+      "key without an id is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, key: "patients:" } })),
+    );
+    check(
+      "key without a colon is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, key: "patients" } })),
+    );
+    check(
+      "devSeq 0 is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, devSeq: 0 } })),
+    );
+    check(
+      "fractional devSeq is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, devSeq: 1.5 } })),
+    );
+    check(
+      "string ts is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, ts: "1000" } })),
+    );
+    check(
+      "string baseTs is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, baseTs: "1" } })),
+    );
+    check(
+      "empty deviceId is rejected",
+      bad(JSON.stringify({ type: "submit", change: { ...change, deviceId: "" } })),
+    );
+    check(
+      "negative cursor is rejected",
+      bad(JSON.stringify({ type: "hello", deviceId: "A", cursor: -1 })),
+    );
+    check(
+      "oversized frame is rejected",
+      bad(
+        JSON.stringify({
+          type: "submit",
+          change: { ...change, value: "x".repeat(MAX_FRAME_BYTES) },
+        }),
+      ),
     );
   }
 
