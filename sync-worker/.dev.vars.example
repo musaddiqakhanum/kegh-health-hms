@@ -1,0 +1,2 @@
+# Copy to sync-worker/.dev.vars for local runs. Never commit the real file.
+ROOM_TOKEN=change-me-locally

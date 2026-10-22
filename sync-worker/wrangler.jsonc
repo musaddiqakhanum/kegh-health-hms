@@ -1,0 +1,11 @@
+{
+  // Real-time sync for KEGH HMS. Separate from the app Worker (see README.md).
+  "name": "kegh-hms-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-11",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "HospitalRoom" }]
+  },
+  // SQLite-backed Durable Object storage (required for new classes on the free plan).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HospitalRoom"] }]
+}
