@@ -15,6 +15,9 @@ try {
       "tsc",
       "src/lib/hms/sync-core.ts",
       "src/lib/hms/sync-protocol.ts",
+      "src/lib/hms/types.ts",
+      "src/lib/hms/realtime-state.ts",
+      "src/lib/hms/realtime.ts",
       "--outDir",
       dir,
       "--rootDir",
@@ -38,6 +41,8 @@ try {
   const require = createRequire(pathToFileURL(join(dir, "index.js")).href);
   const { RoomLog, DeviceSync } = require(join(dir, "lib/hms/sync-core.js"));
   const { parseClientMessage, MAX_FRAME_BYTES } = require(join(dir, "lib/hms/sync-protocol.js"));
+  const rs = require(join(dir, "lib/hms/realtime-state.js"));
+  const { RealtimeClient } = require(join(dir, "lib/hms/realtime.js"));
 
   let failures = 0;
   const check = (name, cond) => {
@@ -379,6 +384,388 @@ try {
         }),
       ),
     );
+  }
+
+  // ---- device snapshot, import, discard, reset ---------------------------
+  {
+    const room = new RoomLog();
+    const a = new DeviceSync("A", 100);
+    room.submit(new DeviceSync("B").write("patients:s1", { v: 1 }, 1000));
+    const first = room.submit(a.write("patients:s2", { v: 2 }, 1000));
+    check("device receives its own accepted update", a.ack(a.pending()[0], first) === true);
+    check("ack removes the change from the outbox", a.pending().length === 0);
+
+    const dup = room.since(0)[0];
+    check(
+      "receive applies a new update once",
+      a.receive(dup) === true && a.receive(dup) === false && a.cursor === 2,
+    );
+    a.write("patients:s3", { v: 3 }, 2000);
+    const snap = JSON.parse(JSON.stringify(a.snapshot()));
+    const back = DeviceSync.fromSnapshot(snap);
+    check(
+      "snapshot round trip keeps the outbox",
+      JSON.stringify(back.pending()) === JSON.stringify(a.pending()),
+    );
+    check("snapshot round trip keeps the cursor", back.cursor === a.cursor);
+    check(
+      "snapshot round trip keeps known versions",
+      back.version("patients:s2")?.ts === a.version("patients:s2")?.ts,
+    );
+    const next = back.write("patients:s4", { v: 4 }, 3000);
+    check(
+      "restored counter continues after the last devSeq",
+      next.devSeq === a.pending().at(-1).devSeq + 1,
+    );
+
+    const imp = back.importLocal("patients:s5", { v: 5 }, 500);
+    check("imported change carries no base version", imp.baseTs === null && imp.ts === 500);
+    back.discard(imp);
+    check("discard removes a change", !back.pending().some((c) => c.key === "patients:s5"));
+
+    const fresh = new DeviceSync("C", 0);
+    fresh.cursor = 40;
+    fresh.write("patients:s6", { v: 6 }, 1000);
+    fresh.resetForNewRoom();
+    check(
+      "reset for a new room clears the cursor and versions",
+      fresh.cursor === 0 && fresh.version("patients:s6") === undefined,
+    );
+    check(
+      "reset keeps unsent changes and drops their base",
+      fresh.pending().length === 1 && fresh.pending()[0].baseTs === null,
+    );
+    const dropped = new DeviceSync("D", 0);
+    check(
+      "a snapshot after a counter restart does not reuse seqs",
+      DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq === 1,
+    );
+  }
+
+  // ---- record keys, room addresses, stable JSON --------------------------
+  {
+    check("split key keeps colons in the id", rs.splitKey("patients:a:b")?.id === "a:b");
+    check("split key rejects an unknown collection", rs.splitKey("secrets:1") === null);
+    check("split key rejects users (not synced yet)", rs.splitKey("users:1") === null);
+    check("split key rejects an empty id", rs.splitKey("patients:") === null);
+    check(
+      "room address: wss with room path is accepted",
+      rs.roomKeyOf("wss://sync.example.org/rooms/kegh-1/ws?token=t") ===
+        "wss://sync.example.org/rooms/kegh-1/ws",
+    );
+    check(
+      "room address: http is refused",
+      rs.roomKeyOf("https://sync.example.org/rooms/kegh-1/ws?token=t") === null,
+    );
+    check(
+      "room address: bad room id is refused",
+      rs.roomKeyOf("wss://h/rooms/BAD_ID/ws?token=t") === null,
+    );
+    check("room address: not a URL is refused", rs.roomKeyOf("not a url") === null);
+    check(
+      "stable JSON ignores key order",
+      rs.stableJson({ a: 1, b: { c: 2, d: 3 } }) === rs.stableJson({ b: { d: 3, c: 2 }, a: 1 }),
+    );
+  }
+
+  // ---- journal, apply, reconcile (pure state rules) ----------------------
+  {
+    const { emptyState } = require(join(dir, "lib/hms/types.js"));
+    const base = emptyState();
+    const p1 = { id: "p1", name: "Ramesh", createdAt: 1000 };
+    const s1 = { ...base, patients: { p1 }, ops: { "patients:p1": 1000 } };
+    const shadow = rs.shadowOf(base);
+    const e1 = rs.journalEntries(shadow, s1, 5000);
+    check(
+      "journal: a new record is one entry at its op time",
+      e1.length === 1 && e1[0].key === "patients:p1" && e1[0].ts === 1000,
+    );
+    check("journal: nothing new is no entries", rs.journalEntries(shadow, s1, 5000).length === 0);
+
+    const p1b = { ...p1, name: "Ramesh K" };
+    const s2 = { ...s1, patients: { p1: p1b }, ops: { "patients:p1": 2000 } };
+    const e2 = rs.journalEntries(shadow, s2, 5000);
+    check(
+      "journal: an edit is one entry with the new value",
+      e2.length === 1 && e2[0].value.name === "Ramesh K" && e2[0].ts === 2000,
+    );
+
+    const s3 = { ...s2, patients: {}, deleted: { "patients:p1": 3000 } };
+    const e3 = rs.journalEntries(shadow, s3, 5000);
+    check(
+      "journal: a delete is a null entry at its delete time",
+      e3.length === 1 && e3[0].value === null && e3[0].ts === 3000,
+    );
+
+    // Remote apply must not echo back to the room.
+    const shadow2 = rs.shadowOf(base);
+    const update = {
+      seq: 7,
+      key: "patients:p9",
+      current: {
+        key: "patients:p9",
+        ts: 4000,
+        deviceId: "X",
+        value: { id: "p9", name: "Remote" },
+        seq: 7,
+      },
+    };
+    const applied = rs.applyUpdates(base, shadow2, [update]);
+    check("apply: a remote record appears in state", applied.patients["p9"]?.name === "Remote");
+    check("apply: sets the op time from the room", applied.ops["patients:p9"] === 4000);
+    check(
+      "apply: does not echo the change back",
+      rs.journalEntries(shadow2, applied, 9000).length === 0,
+    );
+
+    const del = {
+      seq: 8,
+      key: "patients:p9",
+      current: { key: "patients:p9", ts: 5000, deviceId: "X", value: null, seq: 8 },
+    };
+    const removed = rs.applyUpdates(applied, shadow2, [del]);
+    check(
+      "apply: a tombstone removes the record and records the delete",
+      removed.patients["p9"] === undefined && removed.deleted["patients:p9"] === 5000,
+    );
+    check(
+      "apply: a tombstone does not echo back",
+      rs.journalEntries(shadow2, removed, 9000).length === 0,
+    );
+    const junk = {
+      seq: 9,
+      key: "patients:p8",
+      current: { key: "patients:p8", ts: 1, deviceId: "X", value: "not a record", seq: 9 },
+    };
+    check(
+      "apply: a non-record value is skipped",
+      rs.applyUpdates(base, rs.shadowOf(base), [junk]).patients["p8"] === undefined,
+    );
+
+    // Reconcile on connect: send what the room lacks or has differently.
+    const local = rs.localEntries(s1, 9000);
+    const noServer = () => undefined;
+    check(
+      "reconcile: a record the room lacks is sent",
+      rs.reconcileEntries(local, noServer, new Set()).length === 1,
+    );
+    const sameVersion = (key) =>
+      key === "patients:p1" ? { key, ts: 1, deviceId: "Y", value: p1, seq: 1 } : undefined;
+    check(
+      "reconcile: an identical room version is not sent",
+      rs.reconcileEntries(local, sameVersion, new Set()).length === 0,
+    );
+    const diffVersion = (key) =>
+      key === "patients:p1" ? { key, ts: 1, deviceId: "Y", value: p1b, seq: 1 } : undefined;
+    check(
+      "reconcile: a differing room version is sent (conflict check)",
+      rs.reconcileEntries(local, diffVersion, new Set()).length === 1,
+    );
+    check(
+      "reconcile: keys already queued are not sent twice",
+      rs.reconcileEntries(local, noServer, new Set(["patients:p1"])).length === 0,
+    );
+    const tomb = rs.localEntries({ ...base, deleted: { "patients:gone": 100 } }, 9000);
+    check(
+      "reconcile: a local delete the room lacks is not sent",
+      rs.reconcileEntries(tomb, noServer, new Set()).length === 0,
+    );
+    // Connect snapshot: a record that only matches this device's old view is not a change.
+    const oldView = (key) =>
+      key === "patients:p1" ? { key, ts: 1, deviceId: "Y", value: p1, seq: 1 } : undefined;
+    check(
+      "connect snapshot: an unedited record is not re-sent when the room has moved on",
+      rs.unsyncedEntries(s1, oldView, new Set(), 9000).length === 0,
+    );
+    check(
+      "connect snapshot: a record edited since the last sync is sent",
+      rs.unsyncedEntries(s2, oldView, new Set(), 9000).length === 1,
+    );
+    check(
+      "connect snapshot: a record the room never had is sent",
+      rs.unsyncedEntries(s1, noServer, new Set(), 9000).length === 1,
+    );
+    check(
+      "connect snapshot: a queued record is not sent twice",
+      rs.unsyncedEntries(s2, oldView, new Set(["patients:p1"]), 9000).length === 0,
+    );
+    const liveGone = (key) =>
+      key === "patients:gone"
+        ? { key, ts: 1, deviceId: "Y", value: { id: "gone" }, seq: 1 }
+        : undefined;
+    check(
+      "reconcile: a local delete the room still has is sent",
+      rs.reconcileEntries(tomb, liveGone, new Set()).length === 1,
+    );
+  }
+
+  // ---- connection client against an in-process room ----------------------
+  {
+    const roomLog = new RoomLog();
+    const sockets = new Set();
+    const socketOf = new Map();
+    class FakeSocket {
+      constructor(deviceKey) {
+        this.deviceKey = deviceKey;
+        this.closed = false;
+        this.sent = [];
+        this.onopen = null;
+        this.onmessage = null;
+        this.onclose = null;
+        this.onerror = null;
+      }
+      send(text) {
+        if (this.closed) throw new Error("socket closed");
+        const msg = JSON.parse(text);
+        this.sent.push(msg);
+        queueMicrotask(() => handle(this, msg));
+      }
+      close() {
+        if (this.closed) return;
+        this.closed = true;
+        sockets.delete(this);
+      }
+      emit(obj) {
+        if (!this.closed) this.onmessage?.({ data: JSON.stringify(obj) });
+      }
+      drop() {
+        this.close();
+        this.onclose?.({});
+      }
+    }
+    const handle = (socket, msg) => {
+      if (socket.closed) return;
+      if (msg.type === "hello") {
+        socketOf.set(msg.deviceId, socket);
+        socket.emit({
+          type: "catchup",
+          updates: roomLog.since(msg.cursor),
+          lastSeq: roomLog.lastSeq,
+        });
+      } else if (msg.type === "submit") {
+        const result = roomLog.submit(msg.change);
+        socket.emit({
+          type: "ack",
+          deviceId: msg.change.deviceId,
+          devSeq: msg.change.devSeq,
+          result,
+        });
+        if (result.update)
+          for (const s of sockets) s.emit({ type: "update", update: result.update });
+      } else if (msg.type === "ping") {
+        socket.emit({ type: "pong" });
+      }
+    };
+    const makeSocket = () => {
+      const s = new FakeSocket(null);
+      sockets.add(s);
+      setTimeout(() => s.onopen?.({}), 0);
+      return s;
+    };
+    const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+
+    const clients = [];
+    const make = (deviceId, startSeq = 0) => {
+      const info = { applied: [], caught: 0, connecting: 0, status: null, journals: 0 };
+      const device = new DeviceSync(deviceId, startSeq);
+      const client = new RealtimeClient({
+        url: "wss://room.example/rooms/t/ws?token=x",
+        device,
+        makeSocket,
+        random: () => 0.5,
+        hooks: {
+          onUpdates: (us) => info.applied.push(...us),
+          onConnecting: () => info.connecting++,
+          onCaughtUp: () => info.caught++,
+          onStatus: (s) => (info.status = s),
+          onJournal: () => info.journals++,
+        },
+      });
+      clients.push(client);
+      return { device, client, info };
+    };
+
+    const a = make("A", 0);
+    const b = make("B", 0);
+    a.client.start();
+    b.client.start();
+    await tick(30);
+    check("client: both devices reach online", a.client.connected && b.client.connected);
+    check("client: connecting hook ran once per connection", a.info.connecting === 1);
+
+    a.device.write("patients:live", { name: "Live" }, 1000);
+    a.client.notifyLocal();
+    await tick();
+    check(
+      "client: the other device gets the change without waiting for a timer",
+      b.info.applied.some((u) => u.key === "patients:live"),
+    );
+    check(
+      "client: the sender's outbox empties on ack",
+      a.device.pending().length === 0 && a.info.status.pending === 0,
+    );
+
+    // Offline: the change waits and is sent after reconnect.
+    socketOf.get("A").drop();
+    a.device.write("patients:offline", { name: "Offline" }, 2000);
+    a.client.notifyLocal();
+    await tick(5);
+    check(
+      "client: an offline change waits in the outbox",
+      a.device.pending().length === 1 && roomLog.get("patients:offline") === undefined,
+    );
+    check(
+      "client: status shows offline with the pending count",
+      a.info.status.status === "offline" && a.info.status.pending === 1,
+    );
+    await tick(600);
+    check(
+      "client: reconnect sends the waiting change",
+      roomLog.get("patients:offline")?.value?.name === "Offline" && a.device.pending().length === 0,
+    );
+    check(
+      "client: the other device receives the reconnected change",
+      b.info.applied.some((u) => u.key === "patients:offline"),
+    );
+    check(
+      "client: status is online again after catch-up",
+      a.client.connected && a.info.status.status === "online",
+    );
+
+    // A change the room can never accept is dropped, not retried forever.
+    a.device.importLocal("secrets:x", { a: 1 }, 3000);
+    a.client.notifyLocal();
+    await tick(5);
+    check(
+      "client: an unsendable change is discarded",
+      !a.device.pending().some((c) => c.key === "secrets:x"),
+    );
+    check("client: the discard is reported", /could not be sent/.test(a.info.status.error ?? ""));
+
+    // Room restarted with less history than this device has seen.
+    const c = make("C", 0);
+    c.device.cursor = 50;
+    c.client.start();
+    await tick(30);
+    check(
+      "client: a reset room resets the device cursor",
+      c.device.cursor === roomLog.lastSeq && c.client.connected,
+    );
+    check("client: a reset room sends the full history again", c.info.applied.length > 0);
+
+    // Stop: no socket left open, no reconnect.
+    a.client.stop();
+    await tick(50);
+    const countAfterStop = sockets.size;
+    await tick(700);
+    check(
+      "client: stop closes the socket and does not reconnect",
+      socketOf.get("A").closed === true &&
+        a.info.status.status === "offline" &&
+        sockets.size === countAfterStop,
+    );
+    for (const client of clients) client.stop();
+    await tick(20);
   }
 
   console.log(

@@ -9,6 +9,7 @@ import { getPassphrase, setPassphrase } from "@/lib/hms/sync";
 import { hashPassword, newSaltHex } from "@/lib/hms/crypto";
 import { activeUsers, findUserByUsername, staffNameFor, userList } from "@/lib/hms/selectors";
 import { serviceRateList } from "@/lib/hms/charges";
+import { roomKeyOf } from "@/lib/hms/realtime-state";
 import { downloadBlob } from "@/lib/hms/csv";
 import { money } from "@/lib/hms/format";
 import { abdmStatus } from "@/lib/abdm/abdm.functions";
@@ -625,6 +626,8 @@ function SettingsPage() {
         </p>
       </Card>
 
+      <RealtimeCard />
+
       <Card className="space-y-4">
         <h2 className="font-semibold">Manual backup</h2>
         <div className="flex flex-wrap gap-2">
@@ -688,6 +691,73 @@ function SettingsPage() {
 }
 
 /* ----------------------------------------------------------- service rates */
+
+/** Room address for real-time sync: a wss:// URL with the room and token. */
+function isRoomAddress(text: string): boolean {
+  if (roomKeyOf(text) === null) return false;
+  return (new URL(text.trim()).searchParams.get("token") ?? "") !== "";
+}
+
+function RealtimeCard() {
+  const { settings, updateSettings, realtime } = useHms();
+  const [draft, setDraft] = useState(settings.realtimeUrl);
+  const trimmed = draft.trim();
+  const valid = trimmed === "" || isRoomAddress(trimmed);
+  const dirty = trimmed !== settings.realtimeUrl.trim();
+
+  let statusText = "Off (not connected)";
+  if (settings.realtimeUrl.trim() && realtime.configured) {
+    if (realtime.status === "online") {
+      statusText =
+        realtime.pending > 0 ? `Connected · sending ${realtime.pending}` : "Connected · live";
+    } else if (realtime.status === "connecting") {
+      statusText = "Connecting…";
+    } else {
+      statusText = "Not connected · retrying";
+    }
+  }
+
+  return (
+    <Card className="space-y-4">
+      <h2 className="font-semibold">Real-time sync (pilot)</h2>
+      <p className="text-xs text-muted-foreground">
+        While a room address is set, changes on this device are sent to the hospital room, and other
+        devices receive them within about a second. Changes made offline wait on this device and are
+        sent when it reconnects. <strong>Patient data is sent to the room.</strong> Use this only
+        after the data-protection review (see docs/realtime-sync-design.md).
+      </p>
+      <Field label="Room address (wss://…/rooms/<room>/ws?token=…)">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Leave empty to turn off"
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </Field>
+      {!valid && (
+        <p className="text-xs text-red-600">
+          Use a wss:// (or ws://) address that ends in /rooms/&lt;room&gt;/ws and includes ?token=.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          disabled={!dirty || !valid}
+          onClick={() => {
+            updateSettings({ realtimeUrl: trimmed });
+            toast.success(trimmed ? "Real-time sync address saved" : "Real-time sync turned off");
+          }}
+        >
+          Save
+        </Button>
+        <span className="text-xs text-muted-foreground" data-testid="realtime-settings-status">
+          {statusText}
+        </span>
+      </div>
+      {realtime.error && <p className="text-xs text-amber-700">{realtime.error}</p>}
+    </Card>
+  );
+}
 
 function ServiceRatesCard() {
   const { state, upsert } = useHms();

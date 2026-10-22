@@ -161,16 +161,59 @@ export class RoomLog {
 }
 
 /** Device side: local view, an outbox of unacknowledged changes, and a catch-up cursor. */
+export interface DeviceSnapshot {
+  deviceId: string;
+  devSeq: number;
+  cursor: number;
+  versions: Record<string, Version>;
+  keySeq: Record<string, number>;
+  seenSeqs: number[];
+  outbox: Change[];
+}
+
+const sameChange = (a: Change, b: Change): boolean =>
+  a.deviceId === b.deviceId && a.devSeq === b.devSeq;
+
 export class DeviceSync {
   private versions = new Map<string, Version>();
   private keySeq = new Map<string, number>();
+  /** Sequence numbers above `cursor` that were received out of order. */
   private seenSeqs = new Set<number>();
   private outbox: Change[] = [];
-  private devSeqCounter = 0;
+  private devSeqCounter: number;
   /** Highest sequence number such that every update up to it has been applied. */
   cursor = 0;
 
-  constructor(readonly deviceId: string) {}
+  /** `initialSeq` starts the per-device counter; pass a timestamp for a new device so a lost snapshot cannot reuse old (deviceId, devSeq) pairs. */
+  constructor(
+    readonly deviceId: string,
+    initialSeq = 0,
+  ) {
+    this.devSeqCounter = initialSeq;
+  }
+
+  /** Persistable copy of everything this device needs to resume. */
+  snapshot(): DeviceSnapshot {
+    return {
+      deviceId: this.deviceId,
+      devSeq: this.devSeqCounter,
+      cursor: this.cursor,
+      versions: Object.fromEntries(this.versions),
+      keySeq: Object.fromEntries(this.keySeq),
+      seenSeqs: [...this.seenSeqs],
+      outbox: [...this.outbox],
+    };
+  }
+
+  static fromSnapshot(snap: DeviceSnapshot): DeviceSync {
+    const device = new DeviceSync(snap.deviceId, snap.devSeq);
+    device.cursor = snap.cursor;
+    device.versions = new Map(Object.entries(snap.versions));
+    device.keySeq = new Map(Object.entries(snap.keySeq));
+    device.seenSeqs = new Set(snap.seenSeqs.filter((seq) => seq > snap.cursor));
+    device.outbox = [...snap.outbox];
+    return device;
+  }
 
   /** Local write (value null = delete). Queued for the room. */
   write(key: string, value: unknown | null, now: number): Change {
@@ -189,28 +232,77 @@ export class DeviceSync {
     return change;
   }
 
+  /**
+   * Queue a record the room may not have, or may have differently. The change
+   * carries no base version, so the room flags any clash as a conflict instead
+   * of overwriting. Used when reconciling a device with the room on connect.
+   */
+  importLocal(key: string, value: unknown | null, ts: number): Change {
+    const change: Change = {
+      deviceId: this.deviceId,
+      devSeq: ++this.devSeqCounter,
+      key,
+      ts,
+      baseTs: null,
+      value,
+    };
+    this.outbox.push(change);
+    return change;
+  }
+
   /** Changes waiting to be sent, oldest first (send in this order; the socket is FIFO). */
   pending(): Change[] {
     return [...this.outbox];
   }
 
-  /** Room acknowledged a submit. Its update also arrives by broadcast; applying it here is harmless. */
-  ack(change: Change, result: SubmitResult): void {
-    this.outbox = this.outbox.filter(
-      (c) => !(c.deviceId === change.deviceId && c.devSeq === change.devSeq),
-    );
-    if (result.update) this.receive(result.update);
+  /** Keys with an unacknowledged change. */
+  pendingKeys(): Set<string> {
+    return new Set(this.outbox.map((c) => c.key));
   }
 
-  /** A room update arrived (broadcast or catch-up). Idempotent and order-independent. */
-  receive(update: Update): void {
-    if (this.seenSeqs.has(update.seq)) return;
-    this.seenSeqs.add(update.seq);
-    while (this.seenSeqs.has(this.cursor + 1)) this.cursor++;
+  /** Drop a change that can never be accepted (for example, it fails validation). */
+  discard(change: Change): void {
+    this.outbox = this.outbox.filter((c) => !sameChange(c, change));
+  }
 
-    if (update.seq <= (this.keySeq.get(update.key) ?? 0)) return;
+  /**
+   * Room acknowledged a submit. Returns true when its update was new and applied.
+   * The same update also arrives by broadcast, which is harmless.
+   */
+  ack(change: Change, result: SubmitResult): boolean {
+    this.outbox = this.outbox.filter((c) => !sameChange(c, change));
+    return result.update ? this.receive(result.update) : false;
+  }
+
+  /**
+   * A room update arrived (broadcast or catch-up). Idempotent and order-independent.
+   * Returns true only when this update became the record's current version, so the
+   * caller should apply it to local state.
+   */
+  receive(update: Update): boolean {
+    if (update.seq <= this.cursor || this.seenSeqs.has(update.seq)) return false;
+    this.seenSeqs.add(update.seq);
+    while (this.seenSeqs.has(this.cursor + 1)) {
+      this.cursor++;
+      this.seenSeqs.delete(this.cursor);
+    }
+
+    if (update.seq <= (this.keySeq.get(update.key) ?? 0)) return false;
     this.keySeq.set(update.key, update.seq);
     this.versions.set(update.key, update.current);
+    return true;
+  }
+
+  /**
+   * Forget everything the room told us. Used when the room has restarted with a
+   * shorter history than this device's cursor. Unsent changes are kept.
+   */
+  resetForNewRoom(): void {
+    this.cursor = 0;
+    this.seenSeqs.clear();
+    this.keySeq.clear();
+    this.versions.clear();
+    this.outbox = this.outbox.map((c) => ({ ...c, baseTs: null }));
   }
 
   /** Current local view of a record (null when absent or deleted). */
@@ -218,7 +310,7 @@ export class DeviceSync {
     return this.versions.get(key)?.value ?? null;
   }
 
-  /** Local version metadata (for tests and conflict review). */
+  /** Local version metadata: the room's version as last seen by this device. */
   version(key: string): Version | undefined {
     return this.versions.get(key);
   }
