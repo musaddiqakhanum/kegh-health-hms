@@ -699,8 +699,11 @@ function isRoomAddress(text: string): boolean {
 }
 
 function RealtimeCard() {
-  const { settings, updateSettings, realtime } = useHms();
+  const { settings, updateSettings, realtime, realtimeSignIn, realtimeSignOut } = useHms();
   const [draft, setDraft] = useState(settings.realtimeUrl);
+  const [login, setLogin] = useState({ username: "", password: "" });
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const trimmed = draft.trim();
   const valid = trimmed === "" || isRoomAddress(trimmed);
   const dirty = trimmed !== settings.realtimeUrl.trim();
@@ -712,10 +715,25 @@ function RealtimeCard() {
         realtime.pending > 0 ? `Connected · sending ${realtime.pending}` : "Connected · live";
     } else if (realtime.status === "connecting") {
       statusText = "Connecting…";
+    } else if (realtime.status === "sign-in") {
+      statusText = "Sign in to sync";
     } else {
       statusText = "Not connected · retrying";
     }
   }
+
+  const submitLogin = async () => {
+    setSigningIn(true);
+    setSignInError(null);
+    const result = await realtimeSignIn(login.username, login.password);
+    setSigningIn(false);
+    if (result.ok) {
+      setLogin({ username: "", password: "" });
+      toast.success(`Signed in to the hospital room as ${result.user.displayName}`);
+    } else {
+      setSignInError(result.error);
+    }
+  };
 
   return (
     <Card className="space-y-4">
@@ -754,6 +772,49 @@ function RealtimeCard() {
           {statusText}
         </span>
       </div>
+      {realtime.configured && !realtime.signedIn && (
+        <div className="space-y-3 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">
+            Sign in with a staff login to send and receive changes. Changes made while signed out
+            wait on this device.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Username">
+              <Input
+                value={login.username}
+                onChange={(e) => setLogin({ ...login, username: e.target.value })}
+                autoComplete="username"
+                spellCheck={false}
+              />
+            </Field>
+            <Field label="Password">
+              <Input
+                type="password"
+                value={login.password}
+                onChange={(e) => setLogin({ ...login, password: e.target.value })}
+                autoComplete="current-password"
+              />
+            </Field>
+          </div>
+          <Button
+            disabled={signingIn || !login.username.trim() || !login.password}
+            onClick={submitLogin}
+          >
+            {signingIn ? "Signing in…" : "Sign in to the room"}
+          </Button>
+          {signInError && <p className="text-xs text-red-600">{signInError}</p>}
+        </div>
+      )}
+      {realtime.configured && realtime.signedIn && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            Signed in to the room on this device.
+          </span>
+          <Button variant="outline" onClick={() => realtimeSignOut()}>
+            Sign out of the room
+          </Button>
+        </div>
+      )}
       {realtime.error && <p className="text-xs text-amber-700">{realtime.error}</p>}
     </Card>
   );

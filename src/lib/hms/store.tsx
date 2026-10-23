@@ -14,7 +14,7 @@ import { seedOtProcedures } from "./ot";
 import { mergeStates } from "./merge";
 import { craftAuditEntry, isAuditedCollection } from "./audit";
 import { DeviceSync, type ReviewItem, type Update } from "./sync-core";
-import { RealtimeClient, type RealtimeSnapshot } from "./realtime";
+import { RealtimeClient, type LoginResult, type RealtimeSnapshot } from "./realtime";
 import {
   applyUpdates,
   journalEntries,
@@ -52,6 +52,10 @@ interface StoreCtx {
   conflicts: ReviewItem[];
   /** "older" applies the losing version as a new edit; "current" keeps what is there. Either way it is marked reviewed. */
   resolveConflict: (seq: number, choice: "older" | "current") => void;
+  /** Sign this device in to the room as a staff member (needs a room address). */
+  realtimeSignIn: (username: string, password: string) => Promise<LoginResult>;
+  /** End this device's room session. Unsent changes stay on the device. */
+  realtimeSignOut: () => void;
   upsert: <T extends Rec>(collection: Collection, record: Partial<T> & { id?: string }) => string;
   remove: (collection: Collection, id: string) => void;
   replaceState: (next: HmsState) => void;
@@ -61,7 +65,30 @@ interface StoreCtx {
 
 const Ctx = createContext<StoreCtx | null>(null);
 
-const IDLE_REALTIME: RealtimeSnapshot = { status: "offline", pending: 0, error: null };
+const IDLE_REALTIME: RealtimeSnapshot = {
+  status: "offline",
+  pending: 0,
+  error: null,
+  signedIn: false,
+};
+
+/** The room session token is kept per browser tab (sessionStorage), per room. */
+const TOKEN_KEY_PREFIX = "kegh-hms-room-session:";
+function readRoomToken(roomKey: string): string | null {
+  try {
+    return window.sessionStorage.getItem(TOKEN_KEY_PREFIX + roomKey);
+  } catch {
+    return null;
+  }
+}
+function writeRoomToken(roomKey: string, token: string | null): void {
+  try {
+    if (token) window.sessionStorage.setItem(TOKEN_KEY_PREFIX + roomKey, token);
+    else window.sessionStorage.removeItem(TOKEN_KEY_PREFIX + roomKey);
+  } catch {
+    // Storage is unavailable (private mode): the device signs in again after reload.
+  }
+}
 
 interface Session {
   device: DeviceSync;
@@ -246,7 +273,9 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       const client = new RealtimeClient({
         url,
         device,
+        token: readRoomToken(roomKey),
         hooks: {
+          onSession: (token) => writeRoomToken(roomKey, token),
           // Keep only local changes the room has not seen. Taken before catch-up
           // replaces this device's view. Records this device merely holds are not
           // changes, so catch-up must not turn them into conflicts.
@@ -289,6 +318,28 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       sessionRef.current = null;
     };
   }, [ready, settings.realtimeUrl, applyRemote]);
+
+  const realtimeSignIn = useCallback<StoreCtx["realtimeSignIn"]>(async (username, password) => {
+    const session = sessionRef.current;
+    if (!session)
+      return { ok: false, error: "Real-time sync is off. Set a room address in Settings." };
+    const name = username.trim().toLowerCase();
+    const local = Object.values(stateRef.current.users).find(
+      (u) => u.username.trim().toLowerCase() === name,
+    );
+    let result = await session.client.signIn(username, password);
+    // The room has no account for this login yet: if this device holds the
+    // hospital's Admin record, offer it (the room takes it only while it has no
+    // active Admin). Sent on this retry only, so ordinary sign-ins never send it.
+    if (!result.ok && local && local.role === "Admin" && local.active) {
+      result = await session.client.signIn(username, password, local);
+    }
+    return result;
+  }, []);
+
+  const realtimeSignOut = useCallback<StoreCtx["realtimeSignOut"]>(() => {
+    sessionRef.current?.client.signOut();
+  }, []);
 
   const upsert = useCallback<StoreCtx["upsert"]>(
     (collection, record) => {
@@ -378,6 +429,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       realtime: realtimeInfo,
       conflicts,
       resolveConflict,
+      realtimeSignIn,
+      realtimeSignOut,
       upsert,
       remove,
       replaceState,
@@ -392,6 +445,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       realtimeInfo,
       conflicts,
       resolveConflict,
+      realtimeSignIn,
+      realtimeSignOut,
       upsert,
       remove,
       replaceState,

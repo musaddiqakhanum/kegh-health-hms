@@ -56,14 +56,17 @@ export interface Conflict {
   other: Version;
 }
 
-export type SubmitOutcome = "accepted" | "duplicate" | "conflict";
+/** "denied": the room refused the change (policy). Nothing was logged; see `reason`. */
+export type SubmitOutcome = "accepted" | "duplicate" | "conflict" | "denied";
 
 export interface SubmitResult {
   outcome: SubmitOutcome;
   /** Sequence number of this change (for duplicates, the original's). */
   seq: number;
-  /** Update to broadcast. Undefined for duplicates. */
+  /** Update to broadcast. Undefined for duplicates. For a denial, the room's current version (sent to the refusing device only). */
   update?: Update;
+  /** Why the change was refused. Set only when outcome is "denied". */
+  reason?: string;
 }
 
 /** Tie-break on equal timestamps so every room picks the same winner. */
@@ -161,6 +164,18 @@ export class RoomLog {
   /** Current version per record key (tombstones included). */
   get(key: string): Version | undefined {
     return this.current.get(key);
+  }
+
+  /** Sequence number of an already accepted change with this (deviceId, devSeq), if any. */
+  priorSeq(deviceId: string, devSeq: number): number | undefined {
+    return this.seen.get(`${deviceId}#${devSeq}`);
+  }
+
+  /** Current versions of every record whose key starts with `prefix` (tombstones included). */
+  currentWithPrefix(prefix: string): Version[] {
+    const out: Version[] = [];
+    for (const [key, version] of this.current) if (key.startsWith(prefix)) out.push(version);
+    return out;
   }
 
   get lastSeq(): number {
@@ -294,6 +309,16 @@ export class DeviceSync {
    */
   ack(change: Change, result: SubmitResult): boolean {
     this.outbox = this.outbox.filter((c) => !sameChange(c, change));
+    if (result.outcome === "denied") {
+      // Refused: the local edit is dropped and the record takes the room's version.
+      // This bypasses the sequence guard on purpose, because the local value was
+      // written without a sequence number and must be replaced.
+      if (!result.update) return false;
+      const { key, current } = result.update;
+      this.keySeq.set(key, Math.max(this.keySeq.get(key) ?? 0, current.seq));
+      this.versions.set(key, current);
+      return true;
+    }
     return result.update ? this.receive(result.update) : false;
   }
 

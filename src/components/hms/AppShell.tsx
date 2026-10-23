@@ -67,6 +67,8 @@ function PinLock({
 
 /** Sidebar text for the room connection. Changes are never hidden: pending counts are shown. */
 function realtimeLabel(rt: { status: string; pending: number }): string {
+  if (rt.status === "sign-in")
+    return rt.pending > 0 ? `Sign in to sync · ${rt.pending} waiting` : "Sign in to sync";
   if (rt.status === "online") return rt.pending > 0 ? `Syncing ${rt.pending}…` : "Live sync";
   if (rt.status === "connecting")
     return rt.pending > 0 ? `Connecting · ${rt.pending} waiting` : "Connecting…";

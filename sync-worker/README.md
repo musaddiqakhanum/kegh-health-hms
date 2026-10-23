@@ -14,7 +14,7 @@ It is a separate Cloudflare Worker, not part of the Nitro app build. The app Wor
 | `src/room.ts` | `HospitalRoom` Durable Object. Holds one `RoomLog`, persists every accepted change before acknowledging it, and broadcasts updates over WebSocket hibernation. |
 | `wrangler.jsonc` | Worker config. SQLite-backed Durable Object class `HospitalRoom` (migration `v1`). |
 | `test/room-check.mjs` | End-to-end checker against a running room. |
-| `.dev.vars.example` | Template for the local room token. |
+| `.dev.vars.example` | Template for the local room token and the session secret. |
 
 The room logic itself lives in `src/lib/hms/sync-core.ts` (`RoomLog`) and the wire format in `src/lib/hms/sync-protocol.ts`. Both are shared with the app and are covered by `scripts/smoke-realtime.mjs`.
 
@@ -38,7 +38,7 @@ Conflicts follow the design: the newer change wins, and the other version is kep
 
 ```sh
 cd sync-worker
-cp .dev.vars.example .dev.vars        # then set ROOM_TOKEN to a local value
+cp .dev.vars.example .dev.vars        # then set ROOM_TOKEN and SESSION_SECRET to local values
 npx wrangler dev --config wrangler.jsonc --ip 0.0.0.0 --port 8787 --persist-to /tmp/sync-state
 ```
 
@@ -65,6 +65,8 @@ The first run covers auth and routing, two devices, live updates, idempotent ret
 ## Before deploying
 
 - **Secret:** `npx wrangler secret put ROOM_TOKEN`. Do not put the real value in `wrangler.jsonc`.
-- **Auth:** `ROOM_TOKEN` is a shared interim secret, not a per-person login. Per-user staff checks and role checks are phase 4.
+- **Device gate:** `ROOM_TOKEN` is a shared secret for the device connection. It is not a login.
+- **Staff sign-in (phase 4):** `npx wrangler secret put SESSION_SECRET`. Staff sign in over the socket with their room username and password. Sessions last 12 hours and are checked against the live account on every message. Set this before any device signs in.
+- **First admin:** the first device to sign in with an Admin account while the room has no active Admin sends that account's record. The room writes it once. Do this on a trusted device, right after the room is created.
 - **Data protection:** patient data may only go here after the review in the design doc.
 - **Deploy:** `npx wrangler deploy`. The app will connect by full URL (phase 2).

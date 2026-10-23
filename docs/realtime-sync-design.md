@@ -1,6 +1,6 @@
 # Real-time sync — design (draft)
 
-Status: **phase 2 implemented, not yet proven in a browser.** Decisions 1–4 are settled (see below). The sync core, the room (`sync-worker/`) and the wire protocol are merged. Phase 2 adds the device transport and wires it into the app. It is off until a room address is set in Settings. Checks so far: smoke suites, the client against the real room (8/8), and the app build. A browser run of the app with two devices has not been done.
+Status: **phases 2–4 implemented, not yet proven in a browser.** Decisions 1–4 are settled (see below). Phase 4 (staff sign-in and change policy in the room) is in this branch. Real-time sync stays off until a room address is set in Settings, and a staff member signs in to the room. Checks so far: smoke suites (165 real-time checks), the room check against a local room (47 checks, plus the restart check), the Worker typecheck, and the app build. The two-device end-to-end run from phase 2 has not been repeated since the phase 4 protocol change. A browser run of the app with two devices has not been done.
 
 ## Goal
 
@@ -59,12 +59,28 @@ Still open (default applies until changed):
    - Store: local `upsert`/`remove` are journaled. Bulk changes (backup restore, Drive merge) are not journaled one record at a time. They are reconciled with the room instead. A restore therefore never deletes room data.
    - Sidebar footer: Live sync / Syncing n / Offline · n waiting. Settings: room address (off when empty).
    - A room whose history is shorter than the device's cursor is treated as reset. The device starts over from zero.
-   - Known limits: the room token is kept in browser settings (not in backups or Drive files). `users` does not sync until phase 4. Two tabs on one device are not coordinated. A reset is detected only by a shorter history, not by a room identity check.
+   - Known limits: the room token is kept in browser settings (not in backups or Drive files). Two tabs on one device are not coordinated. A reset is detected only by a shorter history, not by a room identity check.
 3. **Conflict flagging (implemented):** the room sends the losing version with each conflict (`Update.other`), so every device learns about it on catch-up or live. Each device lists conflicts at `/conflicts` (linked from the sidebar when any are open). The reviewer sees only the fields that differ, and chooses **Use other (older) version** (applied as a new edit, so it wins everywhere) or **Keep current**. Review state is per device.
-4. **Auth:** server-side staff verification and role checks on every change.
+4. **Auth (implemented):**
+   - **Sign-in in the room.** A device signs in with a staff username and password. The room checks them against its own `users` records (hashes are synced; decision 5). A session token is returned: HMAC-SHA-256, signed with the room's `SESSION_SECRET`, valid for 12 hours. Changes to the account are checked live on every message: a deactivated account or a force sign-out (`sessionsKickedAt`) ends the session and closes the socket.
+   - **Nothing without a session.** Catch-up, submit and live updates need a signed-in socket. Updates are sent only to signed-in sockets. The room token alone gets nothing.
+   - **Policy on every change** (`src/lib/hms/sync-auth.ts`, `authorizeChange`): `users`, `staff`, `payrolls` and `expenses` are Admin-only, matching the Admin-only pages in `nav.ts`. `auditLogs` is append-only: entries can be added, never changed or deleted. Everything else can be written by any signed-in staff member.
+   - **Refusal:** a refused change is not logged and takes no sequence number. The device drops the edit and takes the room's version of the record. The user sees a message saying why.
+   - **First admin:** while the room has no active Admin, a `login` may carry the device's local Admin record. The room verifies the password against it and writes the record once. The device sends it on a retry only, after an ordinary sign-in is refused, so routine sign-ins never send the hash.
+   - **Device side:** the session token is kept in `sessionStorage` (per browser tab, per room). Signing in to the app also signs in to the room with the same password. The sidebar shows "Sign in to sync" until a staff member signs in. Settings has a sign-in form and a sign-out button.
 5. **Migration:** one-time import of existing Drive `.keg` data.
 6. **Shadow run:** real-time and Drive sync both on, comparing results, before switching off Drive.
 7. **Cutover** and removal of whole-file sync, if decision 4 says so.
+
+## Phase 4 limits (read before real patient data)
+
+- **Role rules are per collection, not per field or per action.** A Reception account can still change any patient field the app lets it change. The app's own page checks still apply on the device, but the room does not enforce them. Finer rules are a later change.
+- **Password hashes reach every signed-in device.** `users` is synced so that staff can sign in anywhere, which means every device holds the PBKDF2 hashes. This was already true of the local app data and Drive backups. Hashes are no secret from a device that is signed in.
+- **No login rate limit in the room.** The device locks out after five failed attempts (per device). The room itself does not limit guesses, so the room token is the only gate in front of a password guess.
+- **The first-admin window.** Until a room has an active Admin, anyone with the room token can create the first Admin account. Create the room, then sign in on a trusted device straight away.
+- **Session token in `sessionStorage`.** A token survives a reload in the same tab, not a closed tab. After a browser restart the device signs in to the room again.
+- **Sign-in needs the Admin device's records.** A device with no local Admin account cannot make the room's first admin. The app needs at least one Admin account before real-time sync is turned on.
+- **Not yet tested in a browser.** The two-device run and the sign-in form have only been checked by the smoke suite, the room check and the app build.
 
 ## Testing
 

@@ -6,24 +6,34 @@
  * checks shapes, collection names, sizes and numbers before anything reaches
  * the room log. See docs/realtime-sync-design.md.
  */
-import { COLLECTIONS } from "./types";
+import { COLLECTIONS, type User } from "./types";
 import type { Change, SubmitResult, Update } from "./sync-core";
+import type { SessionUser } from "./sync-auth";
 
 /** Largest frame accepted from a device (bytes of UTF-8 JSON). */
 export const MAX_FRAME_BYTES = 256 * 1024;
 const MAX_DEVICE_ID = 64;
 const MAX_ID = 128;
 
+const MAX_SECRET = 1024;
+const MAX_USERNAME = 64;
+
 export type ClientMessage =
   | { type: "hello"; deviceId: string; cursor: number }
   | { type: "submit"; change: Change }
+  | { type: "auth"; token: string }
+  | { type: "login"; username: string; password: string; setup?: User | undefined }
   | { type: "ping" };
+
+/** Error codes the device acts on. Anything else is shown as text only. */
+export type ErrorCode = "sign-in-required" | "invalid-login" | "not-configured";
 
 export type ServerMessage =
   | { type: "catchup"; updates: Update[]; lastSeq: number }
   | { type: "ack"; deviceId: string; devSeq: number; result: SubmitResult }
   | { type: "update"; update: Update }
-  | { type: "error"; message: string }
+  | { type: "session"; token: string; user: SessionUser }
+  | { type: "error"; code?: ErrorCode | undefined; message: string }
   | { type: "pong" };
 
 export type ParseResult = { ok: true; message: ClientMessage } | { ok: false; error: string };
@@ -115,6 +125,34 @@ export function parseClientMessage(text: string): ParseResult {
       const parsed = parseChange(raw["change"]);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       return { ok: true, message: { type: "submit", change: parsed.change } };
+    }
+    case "auth": {
+      const token = raw["token"];
+      if (typeof token !== "string" || token.length === 0 || token.length > MAX_SECRET) {
+        return { ok: false, error: "auth needs a session token" };
+      }
+      return { ok: true, message: { type: "auth", token } };
+    }
+    case "login": {
+      const { username, password, setup } = raw;
+      if (typeof username !== "string" || username.length === 0 || username.length > MAX_USERNAME) {
+        return { ok: false, error: "login needs a username" };
+      }
+      if (typeof password !== "string" || password.length === 0 || password.length > MAX_SECRET) {
+        return { ok: false, error: "login needs a password" };
+      }
+      if (setup !== undefined && !isObject(setup)) {
+        return { ok: false, error: "setup must be a user record" };
+      }
+      return {
+        ok: true,
+        message: {
+          type: "login",
+          username,
+          password,
+          setup: setup === undefined ? undefined : (setup as unknown as User),
+        },
+      };
     }
     case "ping":
       return { ok: true, message: { type: "ping" } };
