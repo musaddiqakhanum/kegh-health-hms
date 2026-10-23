@@ -14,6 +14,7 @@ import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as ClaimsRouteImport } from './routes/claims'
+import { Route as ConflictsRouteImport } from './routes/conflicts'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as HandoverRouteImport } from './routes/handover'
 import { Route as ImagingOrdersRouteImport } from './routes/imaging-orders'
@@ -60,6 +61,11 @@ const BillingRoute = BillingRouteImport.update({
 const ClaimsRoute = ClaimsRouteImport.update({
   id: '/claims',
   path: '/claims',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConflictsRoute = ConflictsRouteImport.update({
+  id: '/conflicts',
+  path: '/conflicts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/claims': typeof ClaimsRoute
+  '/conflicts': typeof ConflictsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/claims': typeof ClaimsRoute
+  '/conflicts': typeof ConflictsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/claims': typeof ClaimsRoute
+  '/conflicts': typeof ConflictsRoute
   '/expenses': typeof ExpensesRoute
   '/handover': typeof HandoverRoute
   '/imaging-orders': typeof ImagingOrdersRoute
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/claims'
+    | '/conflicts'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/claims'
+    | '/conflicts'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/claims'
+    | '/conflicts'
     | '/expenses'
     | '/handover'
     | '/imaging-orders'
@@ -357,6 +369,7 @@ export interface RootRouteChildren {
   AuditRoute: typeof AuditRoute
   BillingRoute: typeof BillingRoute
   ClaimsRoute: typeof ClaimsRoute
+  ConflictsRoute: typeof ConflictsRoute
   ExpensesRoute: typeof ExpensesRoute
   HandoverRoute: typeof HandoverRoute
   ImagingOrdersRoute: typeof ImagingOrdersRoute
@@ -416,6 +429,13 @@ declare module '@tanstack/react-router' {
       path: '/claims'
       fullPath: '/claims'
       preLoaderRoute: typeof ClaimsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/conflicts': {
+      id: '/conflicts'
+      path: '/conflicts'
+      fullPath: '/conflicts'
+      preLoaderRoute: typeof ConflictsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -581,6 +601,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuditRoute: AuditRoute,
   BillingRoute: BillingRoute,
   ClaimsRoute: ClaimsRoute,
+  ConflictsRoute: ConflictsRoute,
   ExpensesRoute: ExpensesRoute,
   HandoverRoute: HandoverRoute,
   ImagingOrdersRoute: ImagingOrdersRoute,

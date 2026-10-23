@@ -65,8 +65,17 @@ function PinLock({
   );
 }
 
+/** Sidebar text for the room connection. Changes are never hidden: pending counts are shown. */
+function realtimeLabel(rt: { status: string; pending: number }): string {
+  if (rt.status === "online") return rt.pending > 0 ? `Syncing ${rt.pending}…` : "Live sync";
+  if (rt.status === "connecting")
+    return rt.pending > 0 ? `Connecting · ${rt.pending} waiting` : "Connecting…";
+  return rt.pending > 0 ? `Offline · ${rt.pending} waiting` : "Offline · will sync on reconnect";
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { settings, updateSettings, online, ready, state, mergeIn } = useHms();
+  const { settings, updateSettings, online, ready, state, mergeIn, realtime, conflicts } = useHms();
+  const openConflicts = conflicts.filter((c) => !c.reviewed).length;
   const { user, logout } = useSession();
   const { patientId: currentId, setPatientId } = useCurrentPatient();
   const currentPatient = currentId ? state.patients[currentId] : undefined;
@@ -199,6 +208,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
           {online ? "Online" : "Offline"} · {role}
         </div>
+        {realtime.configured && (
+          <div
+            className="mt-1 flex items-center gap-2 px-1"
+            title={realtime.error ?? "Real-time sync"}
+            data-testid="realtime-status"
+            data-status={realtime.status}
+          >
+            <span
+              className={cn(
+                "inline-block h-2 w-2 rounded-full",
+                realtime.status === "online" && realtime.pending === 0 && "bg-emerald-400",
+                realtime.status === "online" && realtime.pending > 0 && "bg-amber-300",
+                realtime.status !== "online" && "bg-slate-400",
+              )}
+            />
+            {realtimeLabel(realtime)}
+          </div>
+        )}
+        {openConflicts > 0 && (
+          <Link
+            to="/conflicts"
+            className="mt-1 block truncate px-1 font-medium text-amber-200 underline"
+          >
+            {openConflicts} conflict{openConflicts === 1 ? "" : "s"} to review
+          </Link>
+        )}
         <p className="mt-1 truncate px-1">{settings.deviceName}</p>
         {user ? (
           <div className="mt-2 flex items-center gap-2 rounded-md bg-white/10 px-2.5 py-2">

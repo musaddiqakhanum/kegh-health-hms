@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Cloud,
+  GitMerge,
   FlaskConical,
   History,
   IndianRupee,
@@ -63,6 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Admin-only: every other role's key list below simply omits "audit".
   { to: "/audit", label: "Audit Trail", icon: History, key: "audit" },
   { to: "/sync", label: "Google Drive Sync", icon: Cloud, key: "sync" },
+  { to: "/conflicts", label: "Conflicts", icon: GitMerge, key: "conflicts" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, key: "settings" },
 ];
 
@@ -85,6 +87,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "claims",
     "reports",
     "settings",
+    "conflicts",
   ],
   Nursing: [
     "workspace",
@@ -100,6 +103,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "rads",
     "imagingOrders",
     "settings",
+    "conflicts",
   ],
   Doctor: [
     "workspace",
@@ -121,6 +125,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "medicines",
     "claims",
     "settings",
+    "conflicts",
   ],
   Lab: [
     "workspace",
@@ -133,6 +138,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "imagingOrders",
     "reports",
     "settings",
+    "conflicts",
   ],
   Pharmacy: [
     "workspace",
@@ -143,6 +149,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "medicines",
     "reports",
     "settings",
+    "conflicts",
   ],
   Billing: [
     "workspace",
@@ -154,6 +161,7 @@ const ROLE_KEYS: Record<Role, string[] | "all"> = {
     "ot",
     "reports",
     "settings",
+    "conflicts",
   ],
 };
 

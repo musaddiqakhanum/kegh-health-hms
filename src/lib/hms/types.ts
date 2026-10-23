@@ -1278,6 +1278,11 @@ export interface Settings {
   pin: string;
   autoSync: boolean;
   syncIntervalMinutes: number;
+  /**
+   * Real-time room address (WebSocket URL from the sync worker, including the
+   * room and token). Empty = real-time sync off. Patient data is sent to this room.
+   */
+  realtimeUrl: string;
   encryptionEnabled: boolean;
   driveClientId: string;
   driveFolderName: string;
@@ -1341,6 +1346,7 @@ export const defaultSettings = (): Settings => ({
   pin: "",
   autoSync: true,
   syncIntervalMinutes: 10,
+  realtimeUrl: "",
   encryptionEnabled: false,
   driveClientId: "",
   driveFolderName: "KEGH-HMS Health Records",
