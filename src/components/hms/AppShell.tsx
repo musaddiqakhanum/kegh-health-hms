@@ -74,7 +74,8 @@ function realtimeLabel(rt: { status: string; pending: number }): string {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { settings, updateSettings, online, ready, state, mergeIn, realtime } = useHms();
+  const { settings, updateSettings, online, ready, state, mergeIn, realtime, conflicts } = useHms();
+  const openConflicts = conflicts.filter((c) => !c.reviewed).length;
   const { user, logout } = useSession();
   const { patientId: currentId, setPatientId } = useCurrentPatient();
   const currentPatient = currentId ? state.patients[currentId] : undefined;
@@ -224,6 +225,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
             {realtimeLabel(realtime)}
           </div>
+        )}
+        {openConflicts > 0 && (
+          <Link
+            to="/conflicts"
+            className="mt-1 block truncate px-1 font-medium text-amber-200 underline"
+          >
+            {openConflicts} conflict{openConflicts === 1 ? "" : "s"} to review
+          </Link>
         )}
         <p className="mt-1 truncate px-1">{settings.deviceName}</p>
         {user ? (

@@ -60,7 +60,7 @@ Still open (default applies until changed):
    - Sidebar footer: Live sync / Syncing n / Offline · n waiting. Settings: room address (off when empty).
    - A room whose history is shorter than the device's cursor is treated as reset. The device starts over from zero.
    - Known limits: the room token is kept in browser settings (not in backups or Drive files). `users` does not sync until phase 4. Two tabs on one device are not coordinated. A reset is detected only by a shorter history, not by a room identity check.
-3. **Conflict flagging:** a review list in the app for flagged records.
+3. **Conflict flagging (implemented):** the room sends the losing version with each conflict (`Update.other`), so every device learns about it on catch-up or live. Each device lists conflicts at `/conflicts` (linked from the sidebar when any are open). The reviewer sees only the fields that differ, and chooses **Use other (older) version** (applied as a new edit, so it wins everywhere) or **Keep current**. Review state is per device.
 4. **Auth:** server-side staff verification and role checks on every change.
 5. **Migration:** one-time import of existing Drive `.keg` data.
 6. **Shadow run:** real-time and Drive sync both on, comparing results, before switching off Drive.

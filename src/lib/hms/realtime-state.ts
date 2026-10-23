@@ -195,3 +195,54 @@ export function unsyncedEntries(
 ): Entry[] {
   return reconcileEntries(localEntries(state, now), serverVersion, pending);
 }
+
+/**
+ * Set a record to `value` (null = delete) as a local edit at `now`. Used when a
+ * reviewer chooses the older version of a conflict. The new op time is the newest,
+ * so the choice wins on every device.
+ */
+export function setRecord(
+  state: HmsState,
+  key: string,
+  value: unknown | null,
+  now: number,
+): HmsState {
+  const parts = splitKey(key);
+  if (!parts) return state;
+  const { collection, id } = parts;
+  const records: Record<string, unknown> = { ...recordsOf(state, collection) };
+  const deleted: Record<string, number> = { ...state.deleted };
+  if (value === null) {
+    delete records[id];
+    deleted[key] = now;
+  } else {
+    if (typeof value !== "object" || Array.isArray(value)) return state;
+    records[id] = value;
+    delete deleted[key];
+  }
+  return {
+    ...state,
+    [collection]: records,
+    ops: { ...state.ops, [key]: now },
+    deleted,
+  } as unknown as HmsState;
+}
+
+/** Fields whose values differ between two record versions (`id` and `createdAt` are ignored). */
+export function changedFields(
+  a: unknown,
+  b: unknown,
+): Array<{ field: string; a: unknown; b: unknown }> {
+  const left = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+  const right = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+  const fields = [...new Set([...Object.keys(left), ...Object.keys(right)])]
+    .filter((f) => f !== "id" && f !== "createdAt")
+    .sort();
+  const out: Array<{ field: string; a: unknown; b: unknown }> = [];
+  for (const field of fields) {
+    if (stableJson(left[field]) !== stableJson(right[field])) {
+      out.push({ field, a: left[field], b: right[field] });
+    }
+  }
+  return out;
+}

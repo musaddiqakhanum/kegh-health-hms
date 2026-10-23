@@ -599,6 +599,128 @@ try {
     );
   }
 
+  // ---- conflicts for review (phase 3) ------------------------------------
+  {
+    const room = new RoomLog();
+    const a = new DeviceSync("A", 0);
+    const b = new DeviceSync("B", 0);
+    const first = room.submit(a.write("patients:c1", { name: "Old" }, 1000));
+    b.receive(first.update);
+    // B edits from the version it has, A edits later from the same base: a conflict.
+    const later = room.submit(a.write("patients:c1", { name: "A newer" }, 3000));
+    const stale = room.submit(b.write("patients:c1", { name: "B older" }, 2000));
+    check(
+      "room: an accepted update carries no losing version",
+      first.update.other === undefined && later.update.other === undefined,
+    );
+    check(
+      "room: a conflict update carries the losing version",
+      stale.outcome === "conflict" && stale.update.other?.value?.name === "B older",
+    );
+    check(
+      "room: the kept version is the newer edit",
+      stale.update.current.value.name === "A newer",
+    );
+
+    const observer = new DeviceSync("O", 0);
+    for (const u of room.since(0)) observer.receive(u);
+    const list = observer.conflictList();
+    check(
+      "device: a catch-up conflict is recorded for review",
+      list.length === 1 && list[0].reviewed === false,
+    );
+    check(
+      "device: the record keeps both versions",
+      list[0].kept.value.name === "A newer" && list[0].other.value.name === "B older",
+    );
+    observer.markReviewed(list[0].seq);
+    check(
+      "device: marking reviewed is local and sticks",
+      observer.conflictList()[0].reviewed === true,
+    );
+    observer.markReviewed(999);
+    check("device: marking an unknown conflict does nothing", observer.conflictList().length === 1);
+
+    const snap = JSON.parse(JSON.stringify(observer.snapshot()));
+    const restored = DeviceSync.fromSnapshot(snap);
+    check(
+      "device: snapshot keeps conflicts and review state",
+      restored.conflictList()[0]?.reviewed === true,
+    );
+    check(
+      "device: an older snapshot without conflicts still loads",
+      DeviceSync.fromSnapshot({ ...snap, conflicts: undefined, reviewed: undefined }).conflictList()
+        .length === 0,
+    );
+
+    const dup = room.since(0).find((u) => u.other);
+    check(
+      "device: a repeated conflict update is not recorded twice",
+      (observer.receive(dup), observer.conflictList().length === 1),
+    );
+
+    observer.resetForNewRoom();
+    check("device: a reset room clears conflicts", observer.conflictList().length === 0);
+  }
+
+  // ---- resolving a conflict and showing the difference (phase 3) --------
+  {
+    const { emptyState } = require(join(dir, "lib/hms/types.js"));
+    const base = {
+      ...emptyState(),
+      patients: { p1: { id: "p1", name: "Ramesh", createdAt: 1 } },
+      ops: { "patients:p1": 500 },
+    };
+    const chosen = rs.setRecord(
+      base,
+      "patients:p1",
+      { id: "p1", name: "Ramesh K", createdAt: 1 },
+      9000,
+    );
+    check("resolve: choosing a version sets the record", chosen.patients.p1.name === "Ramesh K");
+    check(
+      "resolve: the choice is the newest edit (op time is now)",
+      chosen.ops["patients:p1"] === 9000,
+    );
+    const shadow = rs.shadowOf(base);
+    check(
+      "resolve: the choice is journaled as one change",
+      rs.journalEntries(shadow, chosen, 9000).length === 1,
+    );
+    const removed = rs.setRecord(base, "patients:p1", null, 9000);
+    check(
+      "resolve: a deleted version removes the record and records the delete",
+      removed.patients.p1 === undefined && removed.deleted["patients:p1"] === 9000,
+    );
+    check(
+      "resolve: a non-record value does not change state",
+      rs.setRecord(base, "patients:p1", "text", 9000) === base,
+    );
+    check(
+      "resolve: an unknown key does not change state",
+      rs.setRecord(base, "secrets:1", { x: 1 }, 9000) === base,
+    );
+    const diff = rs.changedFields(
+      { id: "p1", name: "Ramesh", phone: "1", createdAt: 1 },
+      { id: "p1", name: "Ramesh K", phone: "1", createdAt: 2 },
+    );
+    check(
+      "diff: only the field that differs is listed",
+      diff.length === 1 &&
+        diff[0].field === "name" &&
+        diff[0].a === "Ramesh" &&
+        diff[0].b === "Ramesh K",
+    );
+    check(
+      "diff: a field missing on one side is listed",
+      rs.changedFields({ a: 1 }, { a: 1, b: 2 }).some((d) => d.field === "b"),
+    );
+    check(
+      "diff: equal records have no differences",
+      rs.changedFields({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] }).length === 0,
+    );
+  }
+
   // ---- connection client against an in-process room ----------------------
   {
     const roomLog = new RoomLog();

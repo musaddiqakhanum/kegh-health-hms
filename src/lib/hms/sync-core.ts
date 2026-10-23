@@ -45,6 +45,8 @@ export interface Update {
   seq: number;
   key: string;
   current: Version;
+  /** Set on a conflict: the version that lost (kept for review). */
+  other?: Version | undefined;
 }
 
 export interface Conflict {
@@ -130,7 +132,7 @@ export class RoomLog {
     const kept = beats(incoming, cur) ? incoming : cur;
     const other = kept === incoming ? cur : incoming;
     this.conflicts.push({ key: change.key, seq, kept, other });
-    return this.publish(seq, change.key, kept, "conflict");
+    return this.publish(seq, change.key, kept, "conflict", other);
   }
 
   private publish(
@@ -138,8 +140,14 @@ export class RoomLog {
     key: string,
     version: Version,
     outcome: SubmitOutcome,
+    other?: Version,
   ): SubmitResult {
-    const update: Update = { seq, key, current: { ...version, seq } };
+    const update: Update = {
+      seq,
+      key,
+      current: { ...version, seq },
+      ...(other ? { other: { ...other } } : {}),
+    };
     this.current.set(key, update.current);
     this.updates.push(update);
     return { outcome, seq, update };
@@ -169,6 +177,15 @@ export interface DeviceSnapshot {
   keySeq: Record<string, number>;
   seenSeqs: number[];
   outbox: Change[];
+  /** Conflicts the room reported to this device (optional for older snapshots). */
+  conflicts?: Conflict[];
+  /** Sequence numbers of conflicts this device has reviewed. */
+  reviewed?: number[];
+}
+
+/** A conflict as shown for review. */
+export interface ReviewItem extends Conflict {
+  reviewed: boolean;
 }
 
 const sameChange = (a: Change, b: Change): boolean =>
@@ -180,6 +197,8 @@ export class DeviceSync {
   /** Sequence numbers above `cursor` that were received out of order. */
   private seenSeqs = new Set<number>();
   private outbox: Change[] = [];
+  private conflicts = new Map<number, Conflict>();
+  private reviewed = new Set<number>();
   private devSeqCounter: number;
   /** Highest sequence number such that every update up to it has been applied. */
   cursor = 0;
@@ -202,6 +221,8 @@ export class DeviceSync {
       keySeq: Object.fromEntries(this.keySeq),
       seenSeqs: [...this.seenSeqs],
       outbox: [...this.outbox],
+      conflicts: [...this.conflicts.values()],
+      reviewed: [...this.reviewed],
     };
   }
 
@@ -212,6 +233,8 @@ export class DeviceSync {
     device.keySeq = new Map(Object.entries(snap.keySeq));
     device.seenSeqs = new Set(snap.seenSeqs.filter((seq) => seq > snap.cursor));
     device.outbox = [...snap.outbox];
+    for (const c of snap.conflicts ?? []) device.conflicts.set(c.seq, c);
+    device.reviewed = new Set(snap.reviewed ?? []);
     return device;
   }
 
@@ -287,6 +310,15 @@ export class DeviceSync {
       this.seenSeqs.delete(this.cursor);
     }
 
+    if (update.other) {
+      this.conflicts.set(update.seq, {
+        key: update.key,
+        seq: update.seq,
+        kept: update.current,
+        other: update.other,
+      });
+    }
+
     if (update.seq <= (this.keySeq.get(update.key) ?? 0)) return false;
     this.keySeq.set(update.key, update.seq);
     this.versions.set(update.key, update.current);
@@ -302,7 +334,21 @@ export class DeviceSync {
     this.seenSeqs.clear();
     this.keySeq.clear();
     this.versions.clear();
+    this.conflicts.clear();
+    this.reviewed.clear();
     this.outbox = this.outbox.map((c) => ({ ...c, baseTs: null }));
+  }
+
+  /** Conflicts reported to this device, newest first. */
+  conflictList(): ReviewItem[] {
+    return [...this.conflicts.values()]
+      .map((c) => ({ ...c, reviewed: this.reviewed.has(c.seq) }))
+      .sort((a, b) => b.seq - a.seq);
+  }
+
+  /** Mark a conflict as reviewed on this device. Other devices keep their own review state. */
+  markReviewed(seq: number): void {
+    if (this.conflicts.has(seq)) this.reviewed.add(seq);
   }
 
   /** Current local view of a record (null when absent or deleted). */

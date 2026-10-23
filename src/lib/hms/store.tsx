@@ -13,7 +13,7 @@ import { seedPayers } from "./claims";
 import { seedOtProcedures } from "./ot";
 import { mergeStates } from "./merge";
 import { craftAuditEntry, isAuditedCollection } from "./audit";
-import { DeviceSync, type Update } from "./sync-core";
+import { DeviceSync, type ReviewItem, type Update } from "./sync-core";
 import { RealtimeClient, type RealtimeSnapshot } from "./realtime";
 import {
   applyUpdates,
@@ -21,7 +21,9 @@ import {
   localEntries,
   reconcileEntries,
   roomKeyOf,
+  setRecord,
   shadowOf,
+  splitKey,
   unsyncedEntries,
   type Entry,
   type Shadow,
@@ -46,6 +48,10 @@ interface StoreCtx {
   ready: boolean;
   online: boolean;
   realtime: RealtimeInfo;
+  /** Conflicts the room reported to this device (reviewed and not). */
+  conflicts: ReviewItem[];
+  /** "older" applies the losing version as a new edit; "current" keeps what is there. Either way it is marked reviewed. */
+  resolveConflict: (seq: number, choice: "older" | "current") => void;
   upsert: <T extends Rec>(collection: Collection, record: Partial<T> & { id?: string }) => string;
   remove: (collection: Collection, id: string) => void;
   replaceState: (next: HmsState) => void;
@@ -82,6 +88,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [online, setOnline] = useState(true);
   const [realtime, setRealtime] = useState<RealtimeSnapshot>(IDLE_REALTIME);
+  const [conflicts, setConflicts] = useState<ReviewItem[]>([]);
   const stateRef = useRef(state);
   stateRef.current = state;
   const settingsRef = useRef(settings);
@@ -183,8 +190,34 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
   const applyRemote = useCallback(
     (updates: Update[]) => {
       persistQuiet(applyUpdates(stateRef.current, shadowRef.current, updates));
+      const session = sessionRef.current;
+      if (session) setConflicts(session.device.conflictList());
     },
     [persistQuiet],
+  );
+
+  const resolveConflict = useCallback<StoreCtx["resolveConflict"]>(
+    (seq, choice) => {
+      const session = sessionRef.current;
+      if (!session) return;
+      const item = session.device.conflictList().find((c) => c.seq === seq);
+      if (!item) return;
+      if (choice === "older") {
+        const now = Date.now();
+        const prev = stateRef.current;
+        let next = setRecord(prev, item.key, item.other.value, now);
+        const parts = splitKey(item.key);
+        if (parts) {
+          const { auditLogs, entries } = audit(prev, "update", parts.collection, parts.id, now);
+          next = { ...next, auditLogs, ops: { ...next.ops, ...entries } };
+        }
+        persist(next);
+      }
+      session.device.markReviewed(seq);
+      session.client.notifyLocal();
+      setConflicts(session.device.conflictList());
+    },
+    [persist, audit],
   );
 
   /* Room session: follows the configured room address. Runs after the local
@@ -197,6 +230,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       sessionRef.current?.client.stop();
       sessionRef.current = null;
       setRealtime(IDLE_REALTIME);
+      setConflicts([]);
       return;
     }
 
@@ -237,11 +271,15 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
           onStatus: (s) => {
             if (!cancelled) setRealtime(s);
           },
-          onJournal: (snapshot) => void saveSyncSnapshot(roomKey, snapshot),
+          onJournal: (snapshot) => {
+            void saveSyncSnapshot(roomKey, snapshot);
+            if (!cancelled) setConflicts(device.conflictList());
+          },
         },
       });
       sessionRef.current?.client.stop();
       sessionRef.current = { device, client };
+      setConflicts(device.conflictList());
       client.start();
     })();
 
@@ -338,6 +376,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       ready,
       online,
       realtime: realtimeInfo,
+      conflicts,
+      resolveConflict,
       upsert,
       remove,
       replaceState,
@@ -350,6 +390,8 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       ready,
       online,
       realtimeInfo,
+      conflicts,
+      resolveConflict,
       upsert,
       remove,
       replaceState,
