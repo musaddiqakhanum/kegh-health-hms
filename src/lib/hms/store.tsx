@@ -17,6 +17,7 @@ import { DeviceSync, type ReviewItem, type Update } from "./sync-core";
 import { RealtimeClient, type LoginResult, type RealtimeSnapshot } from "./realtime";
 import {
   applyUpdates,
+  ConnectReconcile,
   journalEntries,
   localEntries,
   reconcileEntries,
@@ -25,7 +26,6 @@ import {
   shadowOf,
   splitKey,
   unsyncedEntries,
-  type Entry,
   type Shadow,
 } from "./realtime-state";
 import {
@@ -59,7 +59,8 @@ interface StoreCtx {
   upsert: <T extends Rec>(collection: Collection, record: Partial<T> & { id?: string }) => string;
   remove: (collection: Collection, id: string) => void;
   replaceState: (next: HmsState) => void;
-  mergeIn: (incoming: HmsState) => void;
+  /** Merge a state in and reconcile it with the room. Returns how many records were sent (0 while offline or catching up). */
+  mergeIn: (incoming: HmsState) => number;
   updateSettings: (patch: Partial<Settings>) => void;
 }
 
@@ -93,6 +94,7 @@ function writeRoomToken(roomKey: string, token: string | null): void {
 interface Session {
   device: DeviceSync;
   client: RealtimeClient;
+  reconcile: ConnectReconcile;
 }
 
 function readSettings(): Settings {
@@ -199,18 +201,24 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     [persistQuiet],
   );
 
-  /** Queue records the room does not have (or has differently). Only when connected. */
-  const reconcileLive = useCallback((next: HmsState) => {
+  /** Send records the room does not have (or has differently) when connected. While catching up, keep them for the reconcile that follows. */
+  const reconcileLive = useCallback((next: HmsState): number => {
     const session = sessionRef.current;
-    if (!session || !session.client.connected) return;
+    if (!session) return 0;
+    if (!session.client.connected) {
+      // Catching up: keep the merged state for the reconcile that follows catch-up.
+      session.reconcile.queue(localEntries(next, Date.now()));
+      return 0;
+    }
     const changes = reconcileEntries(
       localEntries(next, Date.now()),
       (key) => session.device.version(key),
       session.device.pendingKeys(),
     );
-    if (changes.length === 0) return;
+    if (changes.length === 0) return 0;
     for (const e of changes) session.device.importLocal(e.key, e.value, e.ts);
     session.client.notifyLocal();
+    return changes.length;
   }, []);
 
   /** Room updates: apply to local state without echoing them back. */
@@ -269,7 +277,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
         ? DeviceSync.fromSnapshot(snap)
         : // Start the counter at the current time, so a lost snapshot cannot reuse old (deviceId, devSeq) pairs.
           new DeviceSync(settingsRef.current.deviceId, Date.now());
-      let preConnect: Entry[] = [];
+      const reconcile = new ConnectReconcile();
       const client = new RealtimeClient({
         url,
         device,
@@ -280,21 +288,18 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
           // replaces this device's view. Records this device merely holds are not
           // changes, so catch-up must not turn them into conflicts.
           onConnecting: () => {
-            preConnect = unsyncedEntries(
-              stateRef.current,
-              (key) => device.version(key),
-              device.pendingKeys(),
-              Date.now(),
+            reconcile.begin(
+              unsyncedEntries(
+                stateRef.current,
+                (key) => device.version(key),
+                device.pendingKeys(),
+                Date.now(),
+              ),
             );
           },
           onUpdates: applyRemote,
           onCaughtUp: () => {
-            const changes = reconcileEntries(
-              preConnect,
-              (key) => device.version(key),
-              device.pendingKeys(),
-            );
-            preConnect = [];
+            const changes = reconcile.finish((key) => device.version(key), device.pendingKeys());
             for (const e of changes) device.importLocal(e.key, e.value, e.ts);
           },
           onStatus: (s) => {
@@ -307,7 +312,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
         },
       });
       sessionRef.current?.client.stop();
-      sessionRef.current = { device, client };
+      sessionRef.current = { device, client, reconcile };
       setConflicts(device.conflictList());
       client.start();
     })();
@@ -398,11 +403,11 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     [persistQuiet, reconcileLive],
   );
   const mergeIn = useCallback(
-    (incoming: HmsState) => {
+    (incoming: HmsState): number => {
       const next = mergeStates(stateRef.current, incoming);
       shadowRef.current = shadowOf(next);
       persistQuiet(next);
-      reconcileLive(next);
+      return reconcileLive(next);
     },
     [persistQuiet, reconcileLive],
   );

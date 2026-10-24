@@ -418,7 +418,7 @@ try {
     const next = back.write("patients:s4", { v: 4 }, 3000);
     check(
       "restored counter continues after the last devSeq",
-      next.devSeq === a.pending().at(-1).devSeq + 1,
+      next.devSeq > a.pending().at(-1).devSeq,
     );
 
     const imp = back.importLocal("patients:s5", { v: 5 }, 500);
@@ -441,7 +441,8 @@ try {
     const dropped = new DeviceSync("D", 0);
     check(
       "a snapshot after a counter restart does not reuse seqs",
-      DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq === 1,
+      Number.isInteger(DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq) &&
+        DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq >= 1,
     );
   }
 
@@ -595,6 +596,88 @@ try {
       "connect snapshot: a queued record is not sent twice",
       rs.unsyncedEntries(s2, oldView, new Set(["patients:p1"]), 9000).length === 0,
     );
+    // Phase 5: connect-time reconcile, as the store runs it. A device that never
+    // connected holds an older copy of a record (for example from a Drive file).
+    // The room has a newer edit from another device. Connecting must not turn the
+    // old copy into a conflict.
+    const connectRun = (room, device, snapshotState, bulk) => {
+      const reconcile = new rs.ConnectReconcile();
+      reconcile.begin(rs.unsyncedEntries(snapshotState, (k) => device.version(k), device.pendingKeys(), 9000));
+      if (bulk) reconcile.queue(rs.localEntries(bulk, 9000));
+      for (const u of room.since(0)) device.receive(u);
+      for (const e of reconcile.finish((k) => device.version(k), device.pendingKeys())) {
+        device.importLocal(e.key, e.value, e.ts);
+      }
+      for (const c of device.pending()) {
+        const r = room.submit(c);
+        device.ack(c, r);
+      }
+    };
+    {
+      const room = new RoomLog();
+      const y = new DeviceSync("Y", 0);
+      const yc = y.write("patients:p1", { ...p1, name: "Newer name" }, 200);
+      y.ack(yc, room.submit(yc));
+      const old = { ...base, patients: { p1 }, ops: { "patients:p1": 100 } };
+      connectRun(room, new DeviceSync("X", 1000), old, null);
+      check(
+        "connect: an older never-synced copy is not a conflict against a newer room edit",
+        room.conflicts.length === 0 && room.get("patients:p1")?.value?.name === "Newer name",
+      );
+
+      // A copy newer than the room's version is a real change: it is flagged.
+      const room2 = new RoomLog();
+      const y2 = new DeviceSync("Y", 0);
+      room2.submit(y2.write("patients:p1", { ...p1, name: "Room name" }, 200));
+      const newer = { ...base, patients: { p1: { ...p1, name: "Drive name" } }, ops: { "patients:p1": 300 } };
+      connectRun(room2, new DeviceSync("X", 1000), newer, null);
+      check(
+        "connect: a newer never-synced copy is still flagged as a conflict",
+        room2.conflicts.length === 1 && room2.get("patients:p1")?.value?.name === "Drive name",
+      );
+
+      // A bulk merge that lands while catching up is not lost: it is sent after catch-up.
+      const room3 = new RoomLog();
+      const y3 = new DeviceSync("Y", 0);
+      room3.submit(y3.write("patients:p1", { ...p1, name: "Room name" }, 200));
+      const merged = {
+        ...base,
+        patients: { p1: { ...p1, name: "Merged name" }, p2: { id: "p2", name: "Only in Drive", createdAt: 150 } },
+        ops: { "patients:p1": 300, "patients:p2": 150 },
+      };
+      const x3 = new DeviceSync("X", 1000);
+      connectRun(room3, x3, base, merged);
+      check(
+        "connect: a bulk merge made during catch-up reaches the room",
+        room3.get("patients:p2")?.value?.name === "Only in Drive" &&
+          room3.get("patients:p1")?.value?.name === "Merged name",
+      );
+
+      // Reload: the snapshot is saved on a delay, so a reload soon after a change
+    // restores an older counter. The next edit must not reuse a sequence number the
+    // room has already seen, or the room drops it as a duplicate and the edit is lost.
+    {
+      const room = new RoomLog();
+      const d = new DeviceSync("R", 1000);
+      const early = d.snapshot();
+      const c1 = d.write("patients:p1", { ...p1, name: "Before reload" }, 2000);
+      d.ack(c1, room.submit(c1));
+      const restored = DeviceSync.fromSnapshot(early);
+      const c2 = restored.write("patients:p1", { ...p1, name: "After reload" }, 3000);
+      const r2 = room.submit(c2);
+      check(
+        "reload: an edit made right after a reload is not dropped as a duplicate",
+        r2.outcome !== "duplicate" && room.get("patients:p1")?.value?.name === "After reload",
+      );
+    }
+    // Outside a connect window, queueing does nothing.
+      const idle = new rs.ConnectReconcile();
+      idle.queue(rs.localEntries(merged, 9000));
+      check(
+        "connect: nothing queued outside a connect window",
+        idle.finish(() => undefined, new Set()).length === 0,
+      );
+    }
     const liveGone = (key) =>
       key === "patients:gone"
         ? { key, ts: 1, deviceId: "Y", value: { id: "gone" }, seq: 1 }

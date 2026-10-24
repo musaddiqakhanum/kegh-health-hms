@@ -241,8 +241,14 @@ export class DeviceSync {
     };
   }
 
+  /**
+   * Restore from a saved snapshot. The counter never restarts below the current
+   * time: the snapshot is saved on a delay, so changes made just before a reload may
+   * already be in the room with sequence numbers above the saved value. Reusing one
+   * would make the room drop the new change as a duplicate.
+   */
   static fromSnapshot(snap: DeviceSnapshot): DeviceSync {
-    const device = new DeviceSync(snap.deviceId, snap.devSeq);
+    const device = new DeviceSync(snap.deviceId, Math.max(snap.devSeq, Date.now()));
     device.cursor = snap.cursor;
     device.versions = new Map(Object.entries(snap.versions));
     device.keySeq = new Map(Object.entries(snap.keySeq));
