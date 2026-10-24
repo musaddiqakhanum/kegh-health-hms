@@ -10,7 +10,8 @@ import {
   getStoredToken,
   parseFolderId,
 } from "@/lib/hms/drive";
-import { driveScopeFor, runSync } from "@/lib/hms/sync";
+import { driveScopeFor, mergeDriveStates, readDriveFiles, runSync } from "@/lib/hms/sync";
+import { totalsOf, type ShadowCounts, type ShadowReport } from "@/lib/hms/shadow";
 import { fmtDateTime } from "@/lib/hms/format";
 import { Badge, Button, Card, Field, Input, PageHeader } from "@/components/hms/ui";
 
@@ -33,8 +34,14 @@ export const Route = createFileRoute("/sync")({
 });
 
 function SyncPage() {
-  const { settings, updateSettings, state, mergeIn, realtime } = useHms();
+  const { settings, updateSettings, state, mergeIn, compareWithRoom, realtime } = useHms();
   const [busy, setBusy] = useState(false);
+  const [shadow, setShadow] = useState<{
+    report: ShadowReport;
+    pending: number;
+    fileCount: number;
+    at: number;
+  } | null>(null);
   const [checking, setChecking] = useState(false);
   const [folderName, setFolderName] = useState("");
   const teamMode = settings.driveTeamMode;
@@ -109,6 +116,27 @@ function SyncPage() {
           ? "Nothing new to send: the room already has these records."
           : `Sent ${sent} record${sent === 1 ? "" : "s"} to the room. Any clashes are on the Conflicts page.`,
       );
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Shadow run: read every Drive file and compare it with the room. Read-only, so
+   * nothing is written to the room or to Drive.
+   */
+  const compareNow = async () => {
+    setBusy(true);
+    try {
+      const { remotes, files } = await readDriveFiles(settings);
+      const result = compareWithRoom(mergeDriveStates(remotes));
+      if (!result) {
+        toast.error("Connect this device to the room first.");
+        return;
+      }
+      setShadow({ ...result, fileCount: files.length, at: Date.now() });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -340,6 +368,98 @@ function SyncPage() {
           newest change per record wins.
         </p>
       </Card>
+
+      <Card>
+        <h2 className="mb-2 font-semibold">Shadow run: compare Drive with the room</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Reads every Drive file and compares it with the room, record by record. Nothing is written
+          to the room or to Drive. Run it while both are on, and wait until this device has no
+          unsent changes.
+        </p>
+        <Button
+          variant="outline"
+          disabled={busy || !settings.driveClientId || realtime.status !== "online"}
+          onClick={compareNow}
+        >
+          Compare Drive with the room
+        </Button>
+        {shadow ? <ShadowResult shadow={shadow} /> : null}
+      </Card>
+    </div>
+  );
+}
+
+function ShadowResult({
+  shadow,
+}: {
+  shadow: { report: ShadowReport; pending: number; fileCount: number; at: number };
+}) {
+  const total = totalsOf(shadow.report);
+  const rows = Object.entries(shadow.report).sort(([a], [b]) => a.localeCompare(b));
+  const cols: (keyof ShadowCounts)[] = [
+    "same",
+    "onlyDrive",
+    "onlyRoom",
+    "driveNewer",
+    "roomNewer",
+    "sameTime",
+  ];
+  const labels: Record<keyof ShadowCounts, string> = {
+    same: "Same",
+    onlyDrive: "Only in Drive",
+    onlyRoom: "Only in room",
+    driveNewer: "Drive newer",
+    roomNewer: "Room newer",
+    sameTime: "Same time, differs",
+  };
+  const differences =
+    total.onlyDrive + total.onlyRoom + total.driveNewer + total.roomNewer + total.sameTime;
+  return (
+    <div className="mt-4 space-y-3 text-sm">
+      <p>
+        Checked {shadow.fileCount} Drive file{shadow.fileCount === 1 ? "" : "s"} at{" "}
+        {fmtDateTime(shadow.at)}. <strong>{differences}</strong> difference
+        {differences === 1 ? "" : "s"}.
+      </p>
+      {shadow.pending > 0 ? (
+        <p className="text-amber-700">
+          This device has {shadow.pending} change{shadow.pending === 1 ? "" : "s"} not yet sent to
+          the room. Run the comparison again once they are sent.
+        </p>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              <th className="py-1 pr-3 font-medium">Collection</th>
+              {cols.map((c) => (
+                <th key={c} className="py-1 pr-3 font-medium">
+                  {labels[c]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([name, counts]) => (
+              <tr key={name} className="border-t">
+                <td className="py-1 pr-3 font-mono text-xs">{name}</td>
+                {cols.map((c) => (
+                  <td key={c} className="py-1 pr-3 tabular-nums">
+                    {counts[c]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td className="py-1 text-muted-foreground" colSpan={cols.length + 1}>
+                  No records in Drive or in the room.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

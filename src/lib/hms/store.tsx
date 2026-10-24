@@ -14,6 +14,7 @@ import { seedOtProcedures } from "./ot";
 import { mergeStates } from "./merge";
 import { craftAuditEntry, isAuditedCollection } from "./audit";
 import { DeviceSync, type ReviewItem, type Update } from "./sync-core";
+import { compareWithRoom as compareShadow, type ShadowReport } from "./shadow";
 import { RealtimeClient, type LoginResult, type RealtimeSnapshot } from "./realtime";
 import {
   applyUpdates,
@@ -61,6 +62,8 @@ interface StoreCtx {
   replaceState: (next: HmsState) => void;
   /** Merge a state in and reconcile it with the room. Returns how many records were sent (0 while offline or catching up). */
   mergeIn: (incoming: HmsState) => number;
+  /** Shadow run: compare a Drive state with the room (read-only). Null unless connected. */
+  compareWithRoom: (drive: HmsState) => { report: ShadowReport; pending: number } | null;
   updateSettings: (patch: Partial<Settings>) => void;
 }
 
@@ -402,6 +405,18 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     },
     [persistQuiet, reconcileLive],
   );
+  const compareWithRoom = useCallback<StoreCtx["compareWithRoom"]>((drive) => {
+    const session = sessionRef.current;
+    if (!session || !session.client.connected) return null;
+    return {
+      report: compareShadow(
+        drive,
+        (key) => session.device.version(key),
+        session.device.versionKeys(),
+      ),
+      pending: session.device.pending().length,
+    };
+  }, []);
   const mergeIn = useCallback(
     (incoming: HmsState): number => {
       const next = mergeStates(stateRef.current, incoming);
@@ -440,6 +455,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       remove,
       replaceState,
       mergeIn,
+      compareWithRoom,
       updateSettings,
     }),
     [
@@ -456,6 +472,7 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
       remove,
       replaceState,
       mergeIn,
+      compareWithRoom,
       updateSettings,
     ],
   );
