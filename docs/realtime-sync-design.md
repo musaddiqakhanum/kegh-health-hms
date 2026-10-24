@@ -1,6 +1,6 @@
 # Real-time sync — design (draft)
 
-Status: **phases 2–4 implemented, not yet proven in a browser.** Decisions 1–4 are settled (see below). Phase 4 (staff sign-in and change policy in the room) is in this branch. Real-time sync stays off until a room address is set in Settings, and a staff member signs in to the room. Checks so far: smoke suites (165 real-time checks), the room check against a local room (47 checks, plus the restart check), the Worker typecheck, and the app build. The two-device end-to-end run from phase 2 has not been repeated since the phase 4 protocol change. A browser run of the app with two devices has not been done.
+Status: **phases 2–4 implemented and checked in a local browser run.** Decisions 1–5 are settled (see below). Phase 4 (staff sign-in and change policy in the room) is in this branch. Real-time sync stays off until a room address is set in Settings, and a staff member signs in to the room. Checks so far: smoke suites (165 real-time checks), the room check against a local room (47 checks, plus the restart check), the Worker typecheck, and the app build. The two-device end-to-end run from phase 2 has not been repeated since the phase 4 protocol change. A browser run with three profiles (20 checks: sign-in, wrong password, live patient and account sync, force sign-out, sign-out, fresh-device admin sign-in) passed against a local room on 2026-10-24. It has not been run against a deployed room.
 
 ## Goal
 
@@ -38,9 +38,9 @@ Settled by the team:
 3. **Conflict policy:** warn and keep. The newer version wins (ties broken by device id), and the other is kept in the conflicts list for review.
 4. **Google Drive:** kept as an optional backup.
 
-Still open (default applies until changed):
+Settled on 2026-10-24 (phase 4 approval):
 
-5. **Users and passwords.** The `users` collection holds PBKDF2 hashes. *Default: sync hashes so staff can log in on any device, with the server verifying logins.*
+5. **Users and passwords (approved).** The `users` collection holds PBKDF2 hashes. Hashes sync so staff can log in on any device, and the server verifies logins. The first-admin setup path is approved (only while the room has no active Admin). The room keeps its own `SESSION_SECRET` as a Worker secret. Collection-level role rules are enough for the pilot. A non-admin device's stale `users` list is replaced by the room's list.
 
 ## Data that needs special handling
 
@@ -80,7 +80,7 @@ Still open (default applies until changed):
 - **The first-admin window.** Until a room has an active Admin, anyone with the room token can create the first Admin account. Create the room, then sign in on a trusted device straight away.
 - **Session token in `sessionStorage`.** A token survives a reload in the same tab, not a closed tab. After a browser restart the device signs in to the room again.
 - **Sign-in needs the Admin device's records.** A device with no local Admin account cannot make the room's first admin. The app needs at least one Admin account before real-time sync is turned on.
-- **Not yet tested in a browser.** The two-device run and the sign-in form have only been checked by the smoke suite, the room check and the app build.
+- **Browser check is local only.** The three-profile run passed against a local room. It has not been run against a deployed room, and the room has no data-protection review yet.
 
 ## Testing
 
