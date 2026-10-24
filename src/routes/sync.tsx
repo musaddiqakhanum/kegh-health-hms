@@ -33,7 +33,7 @@ export const Route = createFileRoute("/sync")({
 });
 
 function SyncPage() {
-  const { settings, updateSettings, state, mergeIn } = useHms();
+  const { settings, updateSettings, state, mergeIn, realtime } = useHms();
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
   const [folderName, setFolderName] = useState("");
@@ -89,6 +89,30 @@ function SyncPage() {
       toast.error((err as Error).message);
     } finally {
       setChecking(false);
+    }
+  };
+
+  /**
+   * One-time migration into the room: pull every device's .keg file from Drive,
+   * merge, and send what the room lacks. Clashes are kept for review (Conflicts
+   * page), never overwritten. Re-running sends only what is still missing.
+   */
+  const importToRoom = async () => {
+    setBusy(true);
+    try {
+      const { merged, fileCount } = await runSync(state, settings);
+      const sent = mergeIn(merged);
+      updateSettings({ lastSyncAt: Date.now(), lastSyncFileCount: fileCount });
+      setConnected(true);
+      toast.success(
+        sent === 0
+          ? "Nothing new to send: the room already has these records."
+          : `Sent ${sent} record${sent === 1 ? "" : "s"} to the room. Any clashes are on the Conflicts page.`,
+      );
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -245,6 +269,14 @@ function SyncPage() {
           </Button>
           <Button variant="outline" disabled={busy || !settings.driveClientId} onClick={syncNow}>
             <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} /> Sync now
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy || !settings.driveClientId || realtime.status !== "online"}
+            onClick={importToRoom}
+            title="Requires an open real-time room connection"
+          >
+            Import Drive data into the room
           </Button>
           {connected ? (
             <Button

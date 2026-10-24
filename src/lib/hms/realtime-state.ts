@@ -197,6 +197,59 @@ export function unsyncedEntries(
 }
 
 /**
+ * Entries to send once catch-up has finished. A local copy that is not newer
+ * than the room's version is superseded, not a change: the room already has a
+ * later edit, and sending the old copy would only raise a conflict for it. A
+ * newer copy is still sent, and the room flags it as a conflict.
+ */
+export function afterCatchUp(
+  entries: Entry[],
+  serverVersion: (key: string) => Version | undefined,
+  pending: Set<string>,
+): Entry[] {
+  return reconcileEntries(entries, serverVersion, pending).filter((e) => {
+    const sv = serverVersion(e.key);
+    return sv === undefined || e.ts > sv.ts;
+  });
+}
+
+/**
+ * Reconciles state that changes while a connection is catching up. Local changes
+ * taken at connect time, and bulk merges that land before catch-up finishes, are
+ * kept here and reconciled together once the room's versions are known. Without
+ * this, catch-up overwrites a merged value that was never sent.
+ */
+export class ConnectReconcile {
+  private open = false;
+  private snapshot: Entry[] = [];
+  private queued = new Map<string, Entry>();
+
+  /** A connection is opening: keep the local changes taken before catch-up. */
+  begin(snapshot: Entry[]): void {
+    this.open = true;
+    this.snapshot = snapshot;
+    this.queued.clear();
+  }
+
+  /** Bulk local state that changes while the window is open. No-op otherwise. */
+  queue(entries: Entry[]): void {
+    if (!this.open) return;
+    for (const e of entries) this.queued.set(e.key, e);
+  }
+
+  /** Catch-up finished: the entries to send. Closes the window. */
+  finish(serverVersion: (key: string) => Version | undefined, pending: Set<string>): Entry[] {
+    const byKey = new Map<string, Entry>();
+    for (const e of this.snapshot) byKey.set(e.key, e);
+    for (const [key, e] of this.queued) byKey.set(key, e);
+    this.open = false;
+    this.snapshot = [];
+    this.queued.clear();
+    return afterCatchUp([...byKey.values()], serverVersion, pending);
+  }
+}
+
+/**
  * Set a record to `value` (null = delete) as a local edit at `now`. Used when a
  * reviewer chooses the older version of a conflict. The new op time is the newest,
  * so the choice wins on every device.
