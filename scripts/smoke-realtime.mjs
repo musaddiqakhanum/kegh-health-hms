@@ -18,6 +18,7 @@ try {
       "src/lib/hms/types.ts",
       "src/lib/hms/realtime-state.ts",
       "src/lib/hms/realtime.ts",
+      "src/lib/hms/sync-auth.ts",
       "--outDir",
       dir,
       "--rootDir",
@@ -43,6 +44,8 @@ try {
   const { parseClientMessage, MAX_FRAME_BYTES } = require(join(dir, "lib/hms/sync-protocol.js"));
   const rs = require(join(dir, "lib/hms/realtime-state.js"));
   const { RealtimeClient } = require(join(dir, "lib/hms/realtime.js"));
+  const sa = require(join(dir, "lib/hms/sync-auth.js"));
+  const { hashPassword, newSaltHex } = require(join(dir, "lib/hms/crypto.js"));
 
   let failures = 0;
   const check = (name, cond) => {
@@ -446,7 +449,10 @@ try {
   {
     check("split key keeps colons in the id", rs.splitKey("patients:a:b")?.id === "a:b");
     check("split key rejects an unknown collection", rs.splitKey("secrets:1") === null);
-    check("split key rejects users (not synced yet)", rs.splitKey("users:1") === null);
+    check(
+      "split key accepts users (synced, Admin-only on the room)",
+      rs.splitKey("users:1")?.collection === "users",
+    );
     check("split key rejects an empty id", rs.splitKey("patients:") === null);
     check(
       "room address: wss with room path is accepted",
@@ -721,6 +727,177 @@ try {
     );
   }
 
+  // ---- staff sign-in, change policy and refused changes (design phase 4) --
+  {
+    const now = 1_700_000_000_000;
+    const secret = "test-secret";
+    const salt = newSaltHex();
+    const admin = {
+      id: "u-admin",
+      username: "admin",
+      displayName: "Admin",
+      role: "Admin",
+      passwordHash: await hashPassword("admin-pass", salt),
+      salt,
+      active: true,
+      createdAt: 1,
+    };
+    const reception = {
+      ...admin,
+      id: "u-rec",
+      username: "rec",
+      displayName: "Rec",
+      role: "Reception",
+      active: true,
+    };
+    const ch = (key, value, extra = {}) => ({
+      deviceId: "d1",
+      devSeq: 1,
+      key,
+      ts: now,
+      baseTs: null,
+      value,
+      ...extra,
+    });
+
+    const token = await sa.issueSession(secret, "u-admin", now);
+    const claims = await sa.readSession(secret, token, now + 1000);
+    check(
+      "session: a fresh token reads back its user",
+      claims?.userId === "u-admin" && claims.iat === now,
+    );
+    check(
+      "session: a tampered token is refused",
+      (await sa.readSession(secret, token.slice(0, -2) + "xx", now)) === null,
+    );
+    check(
+      "session: a token from another secret is refused",
+      (await sa.readSession("other", token, now)) === null,
+    );
+    check(
+      "session: an expired token is refused",
+      (await sa.readSession(secret, token, now + sa.SESSION_MS)) === null,
+    );
+    check(
+      "session: garbage is refused, not thrown",
+      (await sa.readSession(secret, "not-a-token", now)) === null,
+    );
+
+    check("live: an active account is signed in", sa.liveSessionUser(admin, claims) !== null);
+    check(
+      "live: a deactivated account is signed out",
+      sa.liveSessionUser({ ...admin, active: false }, claims) === null,
+    );
+    check(
+      "live: a session begun before a force sign-out is dropped",
+      sa.liveSessionUser({ ...admin, sessionsKickedAt: now + 500 }, claims) === null,
+    );
+    check(
+      "live: a session begun after the force sign-out stamp still works",
+      sa.liveSessionUser({ ...admin, sessionsKickedAt: now - 500 }, claims) !== null,
+    );
+    check("live: an unknown account is signed out", sa.liveSessionUser(undefined, claims) === null);
+
+    check("password: the right password matches", await sa.passwordMatches(admin, "admin-pass"));
+    check("password: a wrong password does not match", !(await sa.passwordMatches(admin, "guess")));
+    check(
+      "password: an inactive account never matches",
+      !(await sa.passwordMatches({ ...admin, active: false }, "admin-pass")),
+    );
+
+    check("record: a complete user record is accepted", sa.isUserRecord(admin));
+    check("record: an unknown role is refused", !sa.isUserRecord({ ...admin, role: "Janitor" }));
+    check(
+      "record: a missing hash is refused",
+      !sa.isUserRecord({ ...admin, passwordHash: undefined }),
+    );
+
+    const decide = (role, change, current) => sa.authorizeChange(role, change, current);
+    check(
+      "policy: Reception may add a patient",
+      decide("Reception", ch("patients:p1", { name: "R" })).ok,
+    );
+    check("policy: Admin may write a user", decide("Admin", ch("users:u2", reception)).ok);
+    check(
+      "policy: Reception may not write a user",
+      !decide("Reception", ch("users:u2", reception)).ok,
+    );
+    check(
+      "policy: Doctor may not write staff records",
+      !decide("Doctor", ch("staff:s1", { name: "x" })).ok,
+    );
+    check(
+      "policy: Billing may not write payroll",
+      !decide("Billing", ch("payrolls:p1", { amount: 1 })).ok,
+    );
+    check("policy: Admin may write payroll", decide("Admin", ch("payrolls:p1", { amount: 1 })).ok);
+    check(
+      "policy: an audit entry can be added",
+      decide("Reception", ch("auditLogs:a1", { action: "login" })).ok,
+    );
+    check(
+      "policy: an audit entry cannot be changed",
+      !decide("Admin", ch("auditLogs:a1", { action: "x" }, { baseTs: now }), {
+        key: "auditLogs:a1",
+        ts: now,
+        deviceId: "d1",
+        value: {},
+        seq: 1,
+      }).ok,
+    );
+    check(
+      "policy: an audit entry cannot be re-added over an existing one",
+      !decide("Admin", ch("auditLogs:a1", { action: "x" }), {
+        key: "auditLogs:a1",
+        ts: now,
+        deviceId: "d1",
+        value: {},
+        seq: 1,
+      }).ok,
+    );
+    check(
+      "policy: an audit entry cannot be deleted",
+      !decide("Admin", ch("auditLogs:a1", null, { baseTs: now })).ok,
+    );
+    check("policy: an unknown record is refused", !decide("Admin", ch("secrets:x", { a: 1 })).ok);
+
+    // A refused change: the device drops it and takes the room's version.
+    const dev = new DeviceSync("refuser", 0);
+    dev.write("patients:r1", { name: "Local edit" }, now);
+    const sent = dev.pending()[0];
+    const roomVersion = {
+      key: "patients:r1",
+      ts: now - 10,
+      deviceId: "other",
+      value: { name: "Room" },
+      seq: 7,
+    };
+    const applied = dev.ack(sent, {
+      outcome: "denied",
+      seq: 0,
+      reason: "test",
+      update: { seq: 7, key: "patients:r1", current: roomVersion },
+    });
+    check("refusal: the outbox drops the refused change", dev.pending().length === 0);
+    check(
+      "refusal: the record takes the room's version",
+      applied && dev.read("patients:r1")?.name === "Room",
+    );
+    dev.write("patients:r2", { name: "Never there" }, now);
+    const sent2 = dev.pending()[0];
+    dev.ack(sent2, {
+      outcome: "denied",
+      seq: 0,
+      reason: "test",
+      update: {
+        seq: 0,
+        key: "patients:r2",
+        current: { key: "patients:r2", ts: 0, deviceId: "room", value: null, seq: 0 },
+      },
+    });
+    check("refusal: a record the room never had is removed", dev.read("patients:r2") === null);
+  }
+
   // ---- connection client against an in-process room ----------------------
   {
     const roomLog = new RoomLog();
@@ -755,8 +932,35 @@ try {
         this.onclose?.({});
       }
     }
+    const fakeUser = { id: "u1", username: "ana", displayName: "Ana", role: "Admin" };
     const handle = (socket, msg) => {
       if (socket.closed) return;
+      if (msg.type === "login") {
+        if (msg.username === "ana" && msg.password === "pw") {
+          socket.authed = true;
+          socket.emit({ type: "session", token: "t-ana", user: fakeUser });
+        } else {
+          socket.emit({
+            type: "error",
+            code: "invalid-login",
+            message: "Wrong username or password.",
+          });
+        }
+        return;
+      }
+      if (msg.type === "auth") {
+        if (String(msg.token).startsWith("t-")) {
+          socket.authed = true;
+          socket.emit({ type: "session", token: msg.token, user: fakeUser });
+        } else {
+          socket.emit({ type: "error", code: "sign-in-required", message: "Sign in to sync." });
+        }
+        return;
+      }
+      if ((msg.type === "hello" || msg.type === "submit") && !socket.authed) {
+        socket.emit({ type: "error", code: "sign-in-required", message: "Sign in to sync." });
+        return;
+      }
       if (msg.type === "hello") {
         socketOf.set(msg.deviceId, socket);
         socket.emit({
@@ -778,7 +982,9 @@ try {
         socket.emit({ type: "pong" });
       }
     };
+    let socketsMade = 0;
     const makeSocket = () => {
+      socketsMade++;
       const s = new FakeSocket(null);
       sockets.add(s);
       setTimeout(() => s.onopen?.({}), 0);
@@ -787,12 +993,20 @@ try {
     const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
     const clients = [];
-    const make = (deviceId, startSeq = 0) => {
-      const info = { applied: [], caught: 0, connecting: 0, status: null, journals: 0 };
+    const make = (deviceId, startSeq = 0, token = `t-${deviceId}`) => {
+      const info = {
+        applied: [],
+        caught: 0,
+        connecting: 0,
+        status: null,
+        journals: 0,
+        sessions: [],
+      };
       const device = new DeviceSync(deviceId, startSeq);
       const client = new RealtimeClient({
         url: "wss://room.example/rooms/t/ws?token=x",
         device,
+        token,
         makeSocket,
         random: () => 0.5,
         hooks: {
@@ -801,6 +1015,7 @@ try {
           onCaughtUp: () => info.caught++,
           onStatus: (s) => (info.status = s),
           onJournal: () => info.journals++,
+          onSession: (t) => info.sessions.push(t),
         },
       });
       clients.push(client);
@@ -874,6 +1089,56 @@ try {
       c.device.cursor === roomLog.lastSeq && c.client.connected,
     );
     check("client: a reset room sends the full history again", c.info.applied.length > 0);
+
+    // Sign-in states.
+    {
+      const before = socketsMade;
+      const sx = make("S", 0, null);
+      sx.client.start();
+      await tick(20);
+      check(
+        "sign-in: without a session the device does not connect",
+        socketsMade === before && sx.info.status.status === "sign-in",
+      );
+      const wrong = await sx.client.signIn("ana", "nope");
+      await tick(20);
+      check(
+        "sign-in: a wrong password is refused",
+        wrong.ok === false &&
+          sx.info.status.status === "sign-in" &&
+          sx.info.status.signedIn === false,
+      );
+      const right = await sx.client.signIn("ana", "pw");
+      await tick(30);
+      check(
+        "sign-in: the right password signs in and syncs",
+        right.ok === true && sx.client.connected && sx.info.status.signedIn,
+      );
+      check("sign-in: the session token is handed to the app", sx.info.sessions.at(-1) === "t-ana");
+      sx.client.signOut();
+      await tick(20);
+      check(
+        "sign-out: the session is dropped and the socket closed",
+        sx.info.sessions.at(-1) === null &&
+          sx.info.status.status === "sign-in" &&
+          !sx.client.signedIn,
+      );
+
+      const stale = make("T", 0, "stale-token");
+      const before2 = socketsMade;
+      stale.client.start();
+      await tick(30);
+      const madeWhileStale = socketsMade - before2;
+      await tick(700);
+      check(
+        "sign-in: a rejected token stops reconnecting and asks for sign-in",
+        stale.info.status.status === "sign-in" &&
+          socketsMade - before2 === madeWhileStale &&
+          stale.info.sessions.at(-1) === null,
+      );
+      stale.client.stop();
+      sx.client.stop();
+    }
 
     // Stop: no socket left open, no reconnect.
     a.client.stop();

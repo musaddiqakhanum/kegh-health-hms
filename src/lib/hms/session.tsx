@@ -31,7 +31,7 @@ const MAX_FAILURES = 5;
 const LOCKOUT_MS = 60_000;
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const { state, settings, upsert } = useHms();
+  const { state, settings, upsert, realtime, realtimeSignIn, realtimeSignOut } = useHms();
   const [initialMeta] = useState(readSessionMeta);
   const [sessionId, setSessionId] = useState<string | null>(initialMeta.id);
   const [signedInAt, setSignedInAt] = useState<number>(initialMeta.since);
@@ -82,9 +82,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       writeSessionId(null);
       setSessionId(null);
       setSignedInAt(0);
+      realtimeSignOut();
       if (message) toast.error(message);
     },
-    [writeAudit],
+    [writeAudit, realtimeSignOut],
   );
 
   // Force sign-out: an admin's stamp on the account (arriving with a sync)
@@ -146,16 +147,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setSignedInAt(now);
       lastActivityRef.current = now;
       writeAudit("login", u.id, u.role);
+      if (realtime.configured) {
+        // Sign in to the room with the same password (the room checks it again).
+        void realtimeSignIn(username, password).then((r) => {
+          if (!r.ok) toast.error(`Not signed in to the hospital room: ${r.error}`);
+        });
+      }
       return { ok: true, user: u };
     },
-    [writeAudit],
+    [writeAudit, realtime.configured, realtimeSignIn],
   );
 
   const logout = useCallback(() => {
     if (user) writeAudit("logout", user.id, user.role);
     writeSessionId(null);
     setSessionId(null);
-  }, [user, writeAudit]);
+    realtimeSignOut();
+  }, [user, writeAudit, realtimeSignOut]);
 
   const value = useMemo(() => ({ user, login, logout }), [user, login, logout]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

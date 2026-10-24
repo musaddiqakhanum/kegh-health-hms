@@ -4,9 +4,10 @@
  *   GET /health                         → 200 "ok"
  *   GET /rooms/<roomId>/ws?token=<t>    → WebSocket into that hospital's room
  *
- * The room token is an interim shared secret (ROOM_TOKEN). It keeps random
- * clients out while the staff-login checks are built (design phase 4); it is
- * not a per-person login.
+ * The room token (ROOM_TOKEN) is the device gate. It keeps random clients out.
+ * Staff sign in inside the room (design phase 4) with their own username and
+ * password, and get a session token signed with SESSION_SECRET. Only a signed-in
+ * staff member can catch up, submit or receive changes.
  */
 export { HospitalRoom } from "./room";
 
@@ -18,6 +19,8 @@ interface RoomNamespace {
 export interface Env {
   ROOMS: RoomNamespace;
   ROOM_TOKEN: string;
+  /** Signs staff session tokens. Required for sign-in. */
+  SESSION_SECRET?: string;
 }
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;

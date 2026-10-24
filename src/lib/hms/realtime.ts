@@ -1,27 +1,35 @@
 /**
- * Device connection to a hospital room (design phase 2). DOM-free apart from the
- * WebSocket type, so it runs in the browser and in Node tests.
+ * Device connection to a hospital room (design phases 2 and 4). DOM-free apart
+ * from the WebSocket type, so it runs in the browser and in Node tests.
  *
  * Responsibilities:
- *  - Connect, send hello with the device's cursor, apply catch-up.
+ *  - Sign in to the room (a staff login, or an existing session token), then
+ *    connect with the device cursor, apply catch-up.
  *  - Send the outbox in order, keep a bounded number in flight, and resend
  *    everything unacknowledged after any reconnect (the room dedupes by devSeq).
  *  - Reconnect with backoff. A heartbeat detects a silently dead socket.
- *  - Report status: connecting, online (caught up), or offline.
+ *  - A change the room refuses is dropped and the record takes the room's version.
+ *  - Report status: connecting, online (caught up), offline, or sign-in needed.
  *  - Keep the outbox across reloads (the caller saves the snapshot via onJournal).
  */
 import { DeviceSync, type DeviceSnapshot, type SubmitResult, type Update } from "./sync-core";
 import { parseClientMessage } from "./sync-protocol";
+import type { SessionUser } from "./sync-auth";
+import type { User } from "./types";
 
-export type RealtimeStatus = "connecting" | "online" | "offline";
+export type RealtimeStatus = "connecting" | "online" | "offline" | "sign-in";
 
 export interface RealtimeSnapshot {
   status: RealtimeStatus;
   /** Changes not yet acknowledged by the room. */
   pending: number;
-  /** Last problem worth showing (a change that could not be sent). Null when none. */
+  /** Last problem worth showing (a refused or unsendable change). Null when none. */
   error: string | null;
+  /** True while this device holds a room session. */
+  signedIn: boolean;
 }
+
+export type LoginResult = { ok: true; user: SessionUser } | { ok: false; error: string };
 
 export interface RealtimeHooks {
   /** Remote changes that are new for this device. Apply them to local state. */
@@ -33,17 +41,21 @@ export interface RealtimeHooks {
   onStatus(snapshot: RealtimeSnapshot): void;
   /** The device state changed. Persist this snapshot (called after a short delay). */
   onJournal(snapshot: DeviceSnapshot): void;
+  /** The room issued a session token, or the device's session ended (null). */
+  onSession(token: string | null, user: SessionUser | null): void;
 }
 
 export interface RealtimeOptions {
-  /** Full room WebSocket URL, including the token. */
+  /** Full room WebSocket URL, including the room token. */
   url: string;
   device: DeviceSync;
   hooks: RealtimeHooks;
+  /** Session token from an earlier sign-in on this device, if any. */
+  token?: string | null | undefined;
   /** Test seam. Defaults to the browser WebSocket. */
-  makeSocket?: (url: string) => WebSocket;
+  makeSocket?: ((url: string) => WebSocket) | undefined;
   /** Test seam for jitter. Defaults to Math.random. */
-  random?: () => number;
+  random?: (() => number) | undefined;
 }
 
 export const HEARTBEAT_MS = 20_000;
@@ -56,22 +68,38 @@ const SAVE_DELAY_MS = 500;
 type Timer = ReturnType<typeof setTimeout>;
 type TimerName = "retryTimer" | "flushTimer" | "saveTimer" | "pongTimer" | "heartbeatTimer";
 
+interface PendingLogin {
+  username: string;
+  password: string;
+  setup?: User | undefined;
+}
+
 export class RealtimeClient {
   private socket: WebSocket | null = null;
   private connectionId = 0;
   private running = false;
+  /** Signed in and caught up on this connection. */
   private caughtUp = false;
+  /** This connection has a session and has sent hello. */
+  private authed = false;
   private inFlight = new Set<string>();
   private attempt = 0;
   private status: RealtimeStatus = "offline";
   private error: string | null = null;
+  private token: string | null;
+  /** Set when the device must wait for a staff sign-in. Stops automatic reconnects. */
+  private needsSignIn = false;
+  private pendingLogin: PendingLogin | null = null;
+  private loginWaiter: ((result: LoginResult) => void) | null = null;
   private retryTimer: Timer | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: Timer | null = null;
   private flushTimer: Timer | null = null;
   private saveTimer: Timer | null = null;
 
-  constructor(private readonly opts: RealtimeOptions) {}
+  constructor(private readonly opts: RealtimeOptions) {
+    this.token = opts.token ?? null;
+  }
 
   get device(): DeviceSync {
     return this.opts.device;
@@ -82,9 +110,21 @@ export class RealtimeClient {
     return this.running && this.caughtUp && this.socket !== null;
   }
 
+  /** True when this device holds a room session (possibly not yet connected). */
+  get signedIn(): boolean {
+    return this.token !== null;
+  }
+
+  /** Start syncing. Without a session token this only reports that sign-in is needed. */
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.needsSignIn = false;
+    if (!this.token && !this.pendingLogin) {
+      this.running = false;
+      this.setStatus("sign-in");
+      return;
+    }
     this.connect();
   }
 
@@ -97,9 +137,36 @@ export class RealtimeClient {
     this.flushSave();
   }
 
+  /**
+   * Sign this device in to the room as a staff member. Resolves with the result
+   * of the room's check. `setup` is the device's local Admin record, sent only
+   * when the room has no active Admin yet (the first-admin path).
+   */
+  signIn(username: string, password: string, setup?: User): Promise<LoginResult> {
+    return new Promise<LoginResult>((resolve) => {
+      this.loginWaiter?.({ ok: false, error: "Sign-in was replaced by a newer attempt." });
+      this.loginWaiter = resolve;
+      this.pendingLogin = { username, password, setup };
+      this.needsSignIn = false;
+      this.error = null;
+      this.clearTimer("retryTimer");
+      this.attempt = 0;
+      this.running = true;
+      this.teardownSocket();
+      this.connect();
+    });
+  }
+
+  /** End this device's room session. Unsent changes stay in the outbox. */
+  signOut(): void {
+    this.endSession();
+    this.stop();
+    this.setStatus("sign-in");
+  }
+
   /** Reconnect now (for example, when the browser reports it is back online). */
   reconnectNow(): void {
-    if (!this.running || this.socket) return;
+    if (!this.running || this.socket || this.needsSignIn) return;
     this.clearTimer("retryTimer");
     this.attempt = 0;
     this.connect();
@@ -142,6 +209,7 @@ export class RealtimeClient {
   private connect(): void {
     const id = ++this.connectionId;
     this.caughtUp = false;
+    this.authed = false;
     this.inFlight.clear();
     this.setStatus("connecting");
 
@@ -156,13 +224,17 @@ export class RealtimeClient {
 
     ws.onopen = () => {
       if (id !== this.connectionId) return;
-      this.opts.hooks.onConnecting();
-      this.send({
-        type: "hello",
-        deviceId: this.opts.device.deviceId,
-        cursor: this.opts.device.cursor,
-      });
       this.startHeartbeat(id);
+      // A pending sign-in wins over a stored token (the device may be switching staff).
+      if (this.pendingLogin) {
+        this.sendLogin();
+      } else if (this.token) {
+        this.send({ type: "auth", token: this.token });
+      } else {
+        this.needsSignIn = true;
+        this.teardownSocket();
+        this.setStatus("sign-in");
+      }
     };
     ws.onmessage = (ev: MessageEvent) => {
       if (id !== this.connectionId) return;
@@ -172,6 +244,31 @@ export class RealtimeClient {
     ws.onerror = () => {
       // The browser follows an error with a close, which handles the reconnect.
     };
+  }
+
+  /** Sends the pending sign-in once, then forgets the password. */
+  private sendLogin(): void {
+    const login = this.pendingLogin;
+    this.pendingLogin = null;
+    if (!login) return;
+    this.send({
+      type: "login",
+      username: login.username,
+      password: login.password,
+      ...(login.setup ? { setup: login.setup } : {}),
+    });
+  }
+
+  /** Once the room accepts the session: catch up, then the outbox flows. */
+  private beginSync(): void {
+    if (this.authed) return;
+    this.authed = true;
+    this.opts.hooks.onConnecting();
+    this.send({
+      type: "hello",
+      deviceId: this.opts.device.deviceId,
+      cursor: this.opts.device.cursor,
+    });
   }
 
   private onFrame(id: number, text: string): void {
@@ -185,6 +282,20 @@ export class RealtimeClient {
     }
 
     switch (msg["type"]) {
+      case "session": {
+        const token = typeof msg["token"] === "string" ? msg["token"] : null;
+        const user = (msg["user"] ?? null) as SessionUser | null;
+        if (!token || !user) return;
+        this.token = token;
+        this.pendingLogin = null;
+        this.opts.hooks.onSession(token, user);
+        this.loginWaiter?.({ ok: true, user });
+        this.loginWaiter = null;
+        this.error = null;
+        this.beginSync();
+        this.refresh();
+        return;
+      }
       case "catchup": {
         const lastSeq = typeof msg["lastSeq"] === "number" ? msg["lastSeq"] : 0;
         if (lastSeq < this.opts.device.cursor) {
@@ -222,6 +333,9 @@ export class RealtimeClient {
           .find((c) => c.deviceId === deviceId && c.devSeq === devSeq);
         if (!change) return;
         const result = msg["result"] as SubmitResult;
+        if (result.outcome === "denied") {
+          this.error = `The room refused a change (${result.reason ?? "not allowed"}). That record now shows the room's version.`;
+        }
         const applied = this.opts.device.ack(change, result);
         if (applied && result.update) this.opts.hooks.onUpdates([result.update]);
         this.scheduleSave();
@@ -233,9 +347,34 @@ export class RealtimeClient {
         this.clearTimer("pongTimer");
         return;
       case "error": {
-        // Rejected or not saved. Resend everything unacknowledged shortly (the room dedupes).
-        this.error =
+        const code = msg["code"];
+        const message =
           typeof msg["message"] === "string" ? msg["message"] : "The room rejected a message.";
+        if (code === "sign-in-required") {
+          this.endSession();
+          this.needsSignIn = true;
+          this.settleLogin({ ok: false, error: message });
+          this.teardownSocket();
+          this.setStatus("sign-in");
+          return;
+        }
+        if (code === "invalid-login") {
+          this.needsSignIn = true;
+          this.settleLogin({ ok: false, error: message });
+          this.teardownSocket();
+          this.setStatus("sign-in");
+          return;
+        }
+        if (code === "not-configured") {
+          this.needsSignIn = true;
+          this.settleLogin({ ok: false, error: message });
+          this.error = message;
+          this.teardownSocket();
+          this.setStatus("offline");
+          return;
+        }
+        // Rejected or not saved. Resend everything unacknowledged shortly (the room dedupes).
+        this.error = message;
         this.inFlight.clear();
         this.scheduleFlush(id);
         this.refresh();
@@ -244,6 +383,19 @@ export class RealtimeClient {
       default:
         return;
     }
+  }
+
+  private settleLogin(result: LoginResult): void {
+    this.loginWaiter?.(result);
+    this.loginWaiter = null;
+    this.pendingLogin = null;
+  }
+
+  /** Forget the room session on this device. */
+  private endSession(): void {
+    this.token = null;
+    this.pendingLogin = null;
+    this.opts.hooks.onSession(null, null);
   }
 
   private send(message: unknown): void {
@@ -271,6 +423,10 @@ export class RealtimeClient {
     if (id !== this.connectionId) return;
     this.teardownSocket();
     if (!this.running) return;
+    if (this.needsSignIn) {
+      this.setStatus("sign-in");
+      return;
+    }
     this.setStatus("offline");
     this.scheduleReconnect();
   }
@@ -283,7 +439,7 @@ export class RealtimeClient {
     this.attempt++;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
-      if (this.running && !this.socket) this.connect();
+      if (this.running && !this.socket && !this.needsSignIn) this.connect();
     }, delay);
   }
 
@@ -303,6 +459,7 @@ export class RealtimeClient {
     const ws = this.socket;
     this.socket = null;
     this.caughtUp = false;
+    this.authed = false;
     this.inFlight.clear();
     if (ws) {
       ws.onopen = null;
@@ -337,6 +494,7 @@ export class RealtimeClient {
       status: this.status,
       pending: this.opts.device.pending().length,
       error: this.error,
+      signedIn: this.token !== null,
     });
   }
 

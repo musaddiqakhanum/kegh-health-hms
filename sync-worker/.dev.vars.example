@@ -1,2 +1,5 @@
 # Copy to sync-worker/.dev.vars for local runs. Never commit the real file.
+# ROOM_TOKEN: the device gate (interim shared secret; design phase 1b).
 ROOM_TOKEN=change-me-locally
+# SESSION_SECRET: signs staff session tokens (design phase 4). Use a long random value.
+SESSION_SECRET=change-me-session-secret

@@ -12,8 +12,8 @@
 import { COLLECTIONS, type Collection, type HmsState } from "./types";
 import type { Update, Version } from "./sync-core";
 
-/** Collections that sync. `users` stays on this device until server-side auth (design phase 4). */
-export const SYNCED_COLLECTIONS: readonly Collection[] = COLLECTIONS.filter((c) => c !== "users");
+/** Every collection syncs. `users` is admin-only on the room (see sync-auth.ts). */
+export const SYNCED_COLLECTIONS: readonly Collection[] = COLLECTIONS;
 
 const SYNCED = new Set<string>(SYNCED_COLLECTIONS);
 
