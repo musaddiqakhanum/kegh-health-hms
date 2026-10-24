@@ -391,4 +391,9 @@ export class DeviceSync {
   version(key: string): Version | undefined {
     return this.versions.get(key);
   }
+
+  /** Every record key this device has a version for. */
+  versionKeys(): string[] {
+    return [...this.versions.keys()];
+  }
 }

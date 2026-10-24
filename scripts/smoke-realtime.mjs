@@ -19,6 +19,7 @@ try {
       "src/lib/hms/realtime-state.ts",
       "src/lib/hms/realtime.ts",
       "src/lib/hms/sync-auth.ts",
+      "src/lib/hms/shadow.ts",
       "--outDir",
       dir,
       "--rootDir",
@@ -670,6 +671,65 @@ try {
         r2.outcome !== "duplicate" && room.get("patients:p1")?.value?.name === "After reload",
       );
     }
+    // Phase 6: shadow run. Compare a Drive state with the room's versions (read-only).
+    {
+      const sh = require(join(dir, "lib/hms/shadow.js"));
+      const live = (id, ts, name) => ({ key: `patients:${id}`, value: { id, name }, ts });
+      const drive = {
+        ...base,
+        patients: {
+          same: { id: "same", name: "S" },
+          onlyD: { id: "onlyD", name: "D" },
+          dNew: { id: "dNew", name: "Drive" },
+          rNew: { id: "rNew", name: "Drive" },
+          tie: { id: "tie", name: "Drive" },
+        },
+        staff: { s1: { id: "s1", name: "Staff" } },
+        ops: {
+          "patients:same": 100,
+          "patients:onlyD": 100,
+          "patients:dNew": 300,
+          "patients:rNew": 100,
+          "patients:tie": 100,
+          "staff:s1": 100,
+        },
+        deleted: { "patients:gone": 300, "patients:fresh": 300 },
+      };
+      const room = new Map(
+        [
+          { key: "patients:same", ts: 100, value: { id: "same", name: "S" } },
+          { key: "patients:dNew", ts: 200, value: { id: "dNew", name: "Room" } },
+          { key: "patients:rNew", ts: 200, value: { id: "rNew", name: "Room" } },
+          { key: "patients:tie", ts: 100, value: { id: "tie", name: "Room" } },
+          { key: "patients:gone", ts: 200, value: { id: "gone", name: "Room" } },
+          { key: "patients:onlyR", ts: 100, value: { id: "onlyR", name: "Room" } },
+          { key: "patients:roomDel", ts: 150, value: null },
+        ].map((v) => [v.key, { ...v, deviceId: "Y", seq: 1 }]),
+      );
+      const before = JSON.stringify(drive);
+      const rep = sh.compareWithRoom(drive, (k) => room.get(k), [...room.keys()]);
+      check(
+        "shadow: each record lands in the right category",
+        JSON.stringify(rep.patients) ===
+          JSON.stringify({ same: 1, onlyDrive: 1, onlyRoom: 1, driveNewer: 2, roomNewer: 1, sameTime: 1 }),
+      );
+      check(
+        "shadow: a Drive-only record in another collection is counted",
+        JSON.stringify(rep.staff) ===
+          JSON.stringify({ same: 0, onlyDrive: 1, onlyRoom: 0, driveNewer: 0, roomNewer: 0, sameTime: 0 }),
+      );
+      check(
+        "shadow: a record deleted on both sides is not counted",
+        rep.patients.onlyRoom === 1 && sh.totalsOf(rep).onlyDrive === 2,
+      );
+      check("shadow: the comparison does not change its input", JSON.stringify(drive) === before);
+      const empty = sh.compareWithRoom(drive, () => undefined, []);
+      check(
+        "shadow: an empty room shows every live Drive record as only in Drive",
+        sh.totalsOf(empty).onlyDrive === 6 && sh.totalsOf(empty).onlyRoom === 0,
+      );
+    }
+
     // Outside a connect window, queueing does nothing.
       const idle = new rs.ConnectReconcile();
       idle.queue(rs.localEntries(merged, 9000));

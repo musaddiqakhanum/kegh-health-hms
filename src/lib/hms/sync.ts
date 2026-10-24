@@ -8,11 +8,12 @@ import {
   listKegFiles,
   parseFolderId,
   uploadFile,
+  type DriveFile,
   type DriveScope,
 } from "./drive";
 import { mergeStates } from "./merge";
 import { packState, unpackState } from "./pack";
-import type { HmsState, Settings } from "./types";
+import { emptyState, type HmsState, type Settings } from "./types";
 
 const PASS_KEY = "kegh-hms-pass";
 
@@ -41,7 +42,21 @@ export interface SyncResult {
   folderId: string;
 }
 
-export async function runSync(local: HmsState, settings: Settings): Promise<SyncResult> {
+export interface DriveRead {
+  /** Each readable `.keg` file, unpacked. Unreadable files are skipped. */
+  remotes: HmsState[];
+  /** The listed `.keg` files. */
+  files: DriveFile[];
+  folderId: string;
+  token: string;
+  passphrase: string;
+}
+
+/**
+ * Read every `.keg` file in the Drive folder. Reads only: nothing is uploaded.
+ * Used by the sync itself and by the shadow-run comparison.
+ */
+export async function readDriveFiles(settings: Settings): Promise<DriveRead> {
   const scope = driveScopeFor(settings);
   const token =
     getStoredToken(scope)?.accessToken ?? (await connectDrive(settings.driveClientId, scope));
@@ -57,16 +72,28 @@ export async function runSync(local: HmsState, settings: Settings): Promise<Sync
     throw new Error("Encryption is on but no passphrase is set for this session.");
   }
 
-  let merged = local;
+  const remotes: HmsState[] = [];
   for (const f of files) {
     try {
       const bytes = await downloadFile(token, f.id);
-      const remote = await unpackState(bytes, passphrase || undefined);
-      merged = mergeStates(merged, remote);
+      remotes.push(await unpackState(bytes, passphrase || undefined));
     } catch (err) {
       console.error(`Skipping ${f.name}:`, err);
     }
   }
+  return { remotes, files, folderId, token, passphrase };
+}
+
+/** All Drive states merged into one (no local state involved). */
+export function mergeDriveStates(remotes: readonly HmsState[]): HmsState {
+  return remotes.reduce((acc, remote) => mergeStates(acc, remote), emptyState());
+}
+
+export async function runSync(local: HmsState, settings: Settings): Promise<SyncResult> {
+  const { remotes, files, folderId, token, passphrase } = await readDriveFiles(settings);
+
+  let merged = local;
+  for (const remote of remotes) merged = mergeStates(merged, remote);
 
   const myName = `kegh-${settings.deviceId || "device"}.keg`;
   const mine = files.find((f) => f.name === myName);
