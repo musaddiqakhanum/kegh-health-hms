@@ -30,6 +30,10 @@ Client → server:
 
 Server → client: `catchup`, `ack` (includes `result`: `accepted`, `duplicate` or `conflict`), `update`, `pong`, `error`.
 
+Sign-in errors (`error` frames with a `code`): `invalid-login` (wrong username or password, or an inactive account; the same answer for each), `too-many-attempts` (the username is locked; the message says how many minutes to wait), `sign-in-required`, `not-configured`.
+
+**Sign-in throttle.** The room counts sign-in attempts per username (case and spacing ignored), including unknown names so the lock does not reveal which accounts exist. The sixth attempt in a 15-minute window locks that name for 15 minutes, and the right password is refused during the lock. A successful sign-in clears the count. The count is saved in the room's storage, so a lock survives a restart. The limits are the constants `LOGIN_MAX_ATTEMPTS`, `LOGIN_WINDOW_MS` and `LOGIN_LOCK_MS` in `src/room.ts`. Separately, the app's own sign-in on each device locks that device for 60 seconds after five failures (`src/lib/hms/session.tsx`). Trade-off: anyone holding the room token can lock a staff name for 15 minutes by guessing, so keep the room token secret.
+
 Retries are safe. A device resends the same `(deviceId, devSeq)` and gets `duplicate` without a second write.
 
 Conflicts follow the design: the newer change wins, and the other version is kept and flagged for review.
@@ -44,7 +48,7 @@ npx wrangler dev --config wrangler.jsonc --ip 0.0.0.0 --port 8787 --persist-to /
 
 `--persist-to` keeps room history between restarts. Without it, a restart starts empty.
 
-Tested with wrangler 4.151.3. `.dev.vars` and `.wrangler/` are gitignored.
+Tested with wrangler 4.152.0. `.dev.vars` and `.wrangler/` are gitignored.
 
 ## Check it
 
@@ -62,11 +66,24 @@ SYNC_URL=http://localhost:8787 ROOM_TOKEN=<token> SYNC_ROOM=check-1 SYNC_VERIFY=
 
 The first run covers auth and routing, two devices, live updates, idempotent retry, conflicts with newer-wins, rejected bad collections and malformed JSON, and late-device catch-up. The second run checks that sequence numbers and values are unchanged after a restart.
 
-## Before deploying
+## Deploy
 
-- **Secret:** `npx wrangler secret put ROOM_TOKEN`. Do not put the real value in `wrangler.jsonc`.
-- **Device gate:** `ROOM_TOKEN` is a shared secret for the device connection. It is not a login.
-- **Staff sign-in (phase 4):** `npx wrangler secret put SESSION_SECRET`. Staff sign in over the socket with their room username and password. Sessions last 12 hours and are checked against the live account on every message. Set this before any device signs in.
-- **First admin:** the first device to sign in with an Admin account while the room has no active Admin sends that account's record. The room writes it once. Do this on a trusted device, right after the room is created.
-- **Data protection:** patient data may only go here after the review in the design doc.
-- **Deploy:** `npx wrangler deploy`. The app will connect by full URL (phase 2).
+Do not deploy with real patient data until the data-protection review in the design doc is done.
+
+**Warning:** `test/room-check.mjs` creates staff accounts in the room (`check-admin`, `check-reception`, and others) and uses first-admin setup. Run it only against a scratch room. Never run it against the hospital's room.
+
+1. **Choose the room.** One room per hospital. The room id is lowercase letters, digits and hyphens, up to 64 characters.
+2. **Log in to Cloudflare** from `sync-worker/` with `npx wrangler login`, or set a deploy token in the environment. Never paste tokens into chat or into files in Git.
+3. **Set the two secrets** (different values, never the same):
+   - `npx wrangler secret put ROOM_TOKEN` — the device gate. Use a long random value (for example `openssl rand -base64 32`).
+   - `npx wrangler secret put SESSION_SECRET` — signs staff sessions. Use a long random value (for example `openssl rand -base64 48`).
+   - Changing `SESSION_SECRET` signs everyone out. Changing `ROOM_TOKEN` means updating the room address on every device.
+4. **Deploy:** `npx wrangler deploy --config wrangler.jsonc`. The first deploy creates the `HospitalRoom` Durable Object class (migration `v1`).
+5. **Check the room:** `https://<worker-host>/health` must return `ok`. An unauthorised WebSocket request must return 401.
+6. **Create the first admin** on a trusted device, right after deploy, and before any other device signs in. The first Admin account on that device sends its record through the setup path (see "First admin" below).
+7. **Enter the room address** on each device in Settings: `wss://<worker-host>/rooms/<room>/ws?token=<ROOM_TOKEN>`.
+8. **Watch the logs** during the first sign-ins with `npx wrangler tail` (from `sync-worker/`).
+
+**First admin:** the first device to sign in with an Admin account while the room has no active Admin sends that account's record. The room writes it once, and the window closes as soon as one active Admin exists. Do this on a trusted device.
+
+**Known limits** (also in the design doc): role rules are per collection, not per field; password hashes reach every signed-in device; the sign-in throttle can be used to lock a staff name for 15 minutes; and failed-attempt records are kept until that name is tried again, so a flood of random names grows the room's storage slowly.

@@ -25,7 +25,11 @@ export default defineConfig({
         devOptions: { enabled: false },
         filename: "sw.js",
         manifest: false,
+        // The client build writes to .output/public (nitro). Point the plugin there,
+        // or it globs the empty root dist/ and sw.js is never served.
+        outDir: ".output/public",
         workbox: {
+          globDirectory: ".output/public",
           globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
           navigateFallbackDenylist: [/^\/~oauth/, /^\/api\//],
           runtimeCaching: [

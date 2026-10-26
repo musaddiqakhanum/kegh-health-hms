@@ -30,6 +30,8 @@ const VERIFY_FILE = process.env.SYNC_VERIFY ?? "";
 const ADMIN = { username: "check-admin", password: "check-admin-pass" };
 const ADMIN2 = { username: "check-admin-2", password: "check-admin-2-pass" };
 const RECEPTION = { username: "check-reception", password: "check-reception-pass" };
+/** Account created only for the sign-in throttle check. */
+const THROTTLE = { username: "check-throttle", password: "check-throttle-pass" };
 
 if (!TOKEN) {
   console.error("ROOM_TOKEN is required");
@@ -195,6 +197,11 @@ async function verifyRestart() {
   const after = connect("devAfterRestart");
   const signed = await after.login(ADMIN);
   check("staff accounts survive a restart (admin signs in)", signed.type === "session");
+  const stillLocked = await after.login(THROTTLE);
+  check(
+    "a sign-in lock survives a restart (the throttled account stays locked)",
+    stillLocked.type === "error" && stillLocked.code === "too-many-attempts",
+  );
   const catchAfter = await after.hello(0);
   const afterRows = catchAfter.updates.map((u) => [u.seq, u.key, JSON.stringify(u.current.value)]);
   after.close();
@@ -460,7 +467,75 @@ async function main() {
   );
   late.close();
 
-  const rows = catchLate.updates.map((u) => [u.seq, u.key, JSON.stringify(u.current.value)]);
+  // ---- sign-in throttle -------------------------------------------------------
+  // Five wrong passwords are normal refusals; the sixth attempt locks the name.
+  // The lock also refuses the right password and does not touch other accounts.
+  const throttleRecord = await makeUser(THROTTLE, "Reception");
+  const ackThrottle = await a.submit(
+    devA.write(`users:${throttleRecord.id}`, throttleRecord, Date.now()),
+  );
+  check("an Admin can create the throttle test account", ackThrottle.result.outcome === "accepted");
+
+  const guess = connect("devGuess");
+  const guesses = [];
+  for (let i = 0; i < 5; i++) {
+    guesses.push(await guess.login({ username: " Check-Throttle ", password: `wrong-${i}` }));
+  }
+  check(
+    "five wrong passwords get the normal refusal",
+    guesses.every((m) => m.type === "error" && m.code === "invalid-login"),
+  );
+  const sixth = await guess.login(THROTTLE);
+  check(
+    "the right password is refused once the name is locked",
+    sixth.type === "error" && sixth.code === "too-many-attempts",
+  );
+  check(
+    "the lock message tells the user how long to wait",
+    sixth.type === "error" && /Try again in \d+ minutes?\./.test(sixth.message),
+  );
+
+  const unlockedOther = connect("devOtherAccount");
+  const otherSigned = await unlockedOther.login(ADMIN);
+  check("other accounts are not affected by a lock", otherSigned.type === "session");
+  unlockedOther.close();
+
+  // Unknown names are throttled the same way (the lock must not reveal which accounts exist).
+  const probe = connect("devProbe");
+  const probeResults = [];
+  for (let i = 0; i < 6; i++) {
+    probeResults.push(
+      await probe.login({ username: "check-nobody", password: `guess-${i}` }),
+    );
+  }
+  check(
+    "an unknown name is locked on the sixth attempt too",
+    probeResults.slice(0, 5).every((m) => m.code === "invalid-login") &&
+      probeResults[5].code === "too-many-attempts",
+  );
+  probe.close();
+  guess.close();
+
+  // Parallel guesses on one socket are counted one by one, so a burst cannot get extra tries.
+  const burst = connect("devBurst");
+  await burst.opened;
+  const burstStart = burst.frames.length;
+  for (let i = 0; i < 8; i++) {
+    burst.send({ type: "login", username: "check-burst", password: `burst-${i}` });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const burstReplies = burst.frames.slice(burstStart).filter((m) => m.type === "error");
+  const burstWrong = burstReplies.filter((m) => m.code === "invalid-login").length;
+  const burstLocked = burstReplies.filter((m) => m.code === "too-many-attempts").length;
+  check(
+    "8 parallel guesses: 5 are checked, 3 are refused as locked",
+    burstReplies.length === 8 && burstWrong === 5 && burstLocked === 3,
+  );
+  burst.close();
+
+  // Save the history as it is now (after the throttle check added its account).
+  const catchEnd = await a.hello(0);
+  const rows = catchEnd.updates.map((u) => [u.seq, u.key, JSON.stringify(u.current.value)]);
   a.close();
   b.close();
 

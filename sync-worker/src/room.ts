@@ -44,6 +44,25 @@ import type { User } from "../../src/lib/hms/types";
 const LOG_PREFIX = "log:";
 const logKey = (seq: number) => `${LOG_PREFIX}${String(seq).padStart(12, "0")}`;
 const USERS_PREFIX = "users:";
+const LOGIN_PREFIX = "login:";
+
+/**
+ * Sign-in throttle (per username, case and spacing ignored). Attempts are
+ * counted before the password is checked, so a parallel burst cannot get
+ * extra guesses. After LOGIN_MAX_ATTEMPTS in one window the name is locked
+ * for LOGIN_LOCK_MS. A successful sign-in clears the count. Unknown names are
+ * counted too, so the lock does not reveal which accounts exist.
+ */
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60_000;
+const LOGIN_LOCK_MS = 15 * 60_000;
+
+/** Stored per username (survives hibernation and restarts). */
+interface LoginRecord {
+  attempts: number;
+  windowStart: number;
+  lockedUntil: number;
+}
 
 /** Close code for a socket whose sign-in has ended. */
 const CLOSE_SIGNED_OUT = 4001;
@@ -59,6 +78,7 @@ interface Attached {
 interface RoomStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean | void>;
   list<T = unknown>(options: { prefix: string }): Promise<Map<string, T>>;
 }
 interface RoomSocket extends WebSocket {
@@ -77,11 +97,23 @@ interface RoomEnv {
 
 class PersistError extends Error {}
 
+function isLoginRecord(value: unknown): value is LoginRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r["attempts"] === "number" &&
+    typeof r["windowStart"] === "number" &&
+    typeof r["lockedUntil"] === "number"
+  );
+}
+
 export class HospitalRoom {
   private room: RoomLog = new RoomLog();
   private ready: Promise<void>;
   /** Writes started while handling the current message; awaited before any reply. */
   private pendingWrites: Promise<void>[] = [];
+  /** Sign-in throttle, by normalised username. Changed synchronously; saved to storage. */
+  private logins: Map<string, LoginRecord> = new Map();
 
   constructor(
     private readonly state: RoomState,
@@ -97,6 +129,11 @@ export class HospitalRoom {
     this.room = RoomLog.restore(changes, (seq, change) => {
       this.pendingWrites.push(this.state.storage.put(logKey(seq), change));
     });
+    const throttled = await this.state.storage.list<LoginRecord>({ prefix: LOGIN_PREFIX });
+    this.logins = new Map();
+    for (const [key, record] of throttled) {
+      if (isLoginRecord(record)) this.logins.set(key.slice(LOGIN_PREFIX.length), record);
+    }
   }
 
   /** WebSocket upgrade. The Worker has already checked the room token. */
@@ -154,6 +191,18 @@ export class HospitalRoom {
     await this.ready;
 
     const name = username.trim().toLowerCase();
+    const now = Date.now();
+    const locked = this.claimLoginAttempt(name, now);
+    await this.saveLogin(name);
+    if (locked) {
+      const minutes = Math.ceil((locked.retryAt - now) / 60_000);
+      return this.send(ws, {
+        type: "error",
+        code: "too-many-attempts",
+        message: `Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+      });
+    }
+
     const existing = this.userByUsername(name);
     let verified: User | null = null;
 
@@ -171,13 +220,13 @@ export class HospitalRoom {
     ) {
       // First admin (or recovery after every admin was deactivated). Write the
       // record through the normal log so every device receives it.
-      const now = Date.now();
+      const stamp = Date.now();
       const current = this.room.get(`${USERS_PREFIX}${setup.id}`);
       const change: Change = {
         deviceId: "room-setup",
-        devSeq: now,
+        devSeq: stamp,
         key: `${USERS_PREFIX}${setup.id}`,
-        ts: now,
+        ts: stamp,
         baseTs: current ? current.ts : null,
         value: setup,
       };
@@ -198,10 +247,59 @@ export class HospitalRoom {
         message: "Wrong username or password.",
       });
     }
-    const now = Date.now();
-    const token = await issueSession(secret, verified.id, now);
-    this.attach(ws, { userId: verified.id, iat: now, exp: now + SESSION_MS });
+    await this.clearLoginAttempts(name);
+    const signedAt = Date.now();
+    const token = await issueSession(secret, verified.id, signedAt);
+    this.attach(ws, { userId: verified.id, iat: signedAt, exp: signedAt + SESSION_MS });
     return this.send(ws, { type: "session", token, user: sessionUserOf(verified) });
+  }
+
+  // ---- sign-in throttle --------------------------------------------------
+
+  /**
+   * Count this attempt. Returns null when it may proceed, or the time the lock
+   * ends when the name is locked. Synchronous, so parallel attempts are counted
+   * one by one. The caller then saves the record (saveLogin) before replying.
+   */
+  private claimLoginAttempt(name: string, now: number): { retryAt: number } | null {
+    let record = this.logins.get(name);
+    if (
+      !record ||
+      (record.lockedUntil !== 0 && now >= record.lockedUntil) ||
+      (record.lockedUntil === 0 && now - record.windowStart >= LOGIN_WINDOW_MS)
+    ) {
+      record = { attempts: 0, windowStart: now, lockedUntil: 0 };
+    }
+    if (record.lockedUntil !== 0) {
+      this.logins.set(name, record);
+      return { retryAt: record.lockedUntil };
+    }
+    record.attempts += 1;
+    if (record.attempts > LOGIN_MAX_ATTEMPTS) {
+      record.lockedUntil = now + LOGIN_LOCK_MS;
+      this.logins.set(name, record);
+      return { retryAt: record.lockedUntil };
+    }
+    this.logins.set(name, record);
+    return null;
+  }
+
+  /** Save this name's throttle state. A storage failure is logged; the in-memory count still applies. */
+  private async saveLogin(name: string): Promise<void> {
+    const record = this.logins.get(name);
+    try {
+      if (record) await this.state.storage.put(`${LOGIN_PREFIX}${name}`, record);
+      else await this.state.storage.delete(`${LOGIN_PREFIX}${name}`);
+    } catch (err) {
+      console.error("could not save sign-in throttle", err);
+    }
+  }
+
+  /** A successful sign-in clears the count for that name. */
+  private async clearLoginAttempts(name: string): Promise<void> {
+    if (!this.logins.has(name)) return;
+    this.logins.delete(name);
+    await this.saveLogin(name);
   }
 
   private async authenticate(ws: WebSocket, token: string): Promise<void> {
