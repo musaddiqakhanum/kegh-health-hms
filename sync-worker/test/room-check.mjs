@@ -578,6 +578,34 @@ async function main() {
   );
   recep.close();
 
+  // ---- staff password material never reaches devices (phase 4b, item 4) ------
+  // An account with no password is refused. An Admin renames the clerk without
+  // sending the password material: the room keeps the stored hash, the clerk still
+  // signs in with the password, and no frame sent to any device carries it.
+  const noPassword = await a.submit(
+    manual("devA", "users:pw-missing", { id: "pw-missing", username: "nopass", displayName: "No Pass", role: "Reception", active: true, createdAt: 1 }, null),
+  );
+  check("a staff account without a password is refused", noPassword.result.outcome === "denied");
+
+  const { passwordHash: clerkHash, salt: clerkSalt, ...clerkPublic } = clerkRecord;
+  const renamed = await a.submit(
+    manual("devA", `users:${clerkRecord.id}`, { ...clerkPublic, displayName: "Clerk Two" }, ackClerk.result.update.current.ts),
+  );
+  check("an Admin renames a Reception account without sending its password", renamed.result.outcome === "accepted");
+
+  const clerkAgain = connect("devClerk2");
+  const clerkBack = await clerkAgain.login(CLERK);
+  check("the renamed clerk still signs in with the password", clerkBack.type === "session");
+  const clerkCatchup = await clerkAgain.hello(0);
+  const clerkUser = clerkCatchup.updates
+    .filter((u) => u.key === `users:${clerkRecord.id}`)
+    .at(-1); // the catch-up holds the whole history: the latest version is last
+  check("a new device gets the renamed account without password material", !!clerkUser && clerkUser.current.value.displayName === "Clerk Two" && !("passwordHash" in clerkUser.current.value) && !("salt" in clerkUser.current.value));
+  clerkAgain.close();
+
+  const everything = JSON.stringify([...a.frames, ...clerkAgain.frames]);
+  check("no frame sent to a device carries a password hash or salt", !everything.includes("passwordHash") && !everything.includes(clerkHash) && !everything.includes(clerkSalt));
+
   // Save the history as it is now (after the throttle check added its account).
   const catchEnd = await a.hello(0);
   const rows = catchEnd.updates.map((u) => [u.seq, u.key, JSON.stringify(u.current.value)]);

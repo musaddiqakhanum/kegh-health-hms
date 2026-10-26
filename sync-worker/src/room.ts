@@ -40,11 +40,25 @@ import {
   SESSION_MS,
 } from "../../src/lib/hms/sync-auth";
 import type { User } from "../../src/lib/hms/types";
+import { keepStoredUserSecrets, stripUserSecrets } from "../../src/lib/hms/user-secrets";
 
 const LOG_PREFIX = "log:";
 const logKey = (seq: number) => `${LOG_PREFIX}${String(seq).padStart(12, "0")}`;
 const USERS_PREFIX = "users:";
 const LOGIN_PREFIX = "login:";
+
+/** Staff password material never leaves the room (phase 4b, item 4). */
+function deviceUpdate(update: Update): Update {
+  if (!update.key.startsWith(USERS_PREFIX) || update.current.value === null) return update;
+  return {
+    ...update,
+    current: { ...update.current, value: stripUserSecrets(update.current.value) },
+  };
+}
+
+function deviceResult(result: SubmitResult): SubmitResult {
+  return result.update ? { ...result, update: deviceUpdate(result.update) } : result;
+}
 
 /**
  * Sign-in throttle (per username, case and spacing ignored). Attempts are
@@ -163,7 +177,7 @@ export class HospitalRoom {
         return this.authenticate(ws, msg.token);
       case "hello": {
         if (!this.signedInUser(ws)) return this.signInRequired(ws);
-        const updates = this.room.since(msg.cursor);
+        const updates = this.room.since(msg.cursor).map(deviceUpdate);
         return this.send(ws, { type: "catchup", updates, lastSeq: this.room.lastSeq });
       }
       case "ping":
@@ -333,11 +347,18 @@ export class HospitalRoom {
         type: "ack",
         deviceId: change.deviceId,
         devSeq: change.devSeq,
-        result: dup,
+        result: deviceResult(dup),
       });
     }
 
     const current = this.room.get(change.key);
+    // An edit that leaves out the password material keeps the stored material.
+    if (change.key.startsWith(USERS_PREFIX) && change.value !== null) {
+      change = {
+        ...change,
+        value: keepStoredUserSecrets(change.value, current?.value) as Change["value"],
+      };
+    }
     const decision = authorizeChange(user.role, change, current);
     if (!decision.ok) {
       // Refused: nothing is logged. The device gets the room's version back.
@@ -351,7 +372,7 @@ export class HospitalRoom {
         type: "ack",
         deviceId: change.deviceId,
         devSeq: change.devSeq,
-        result,
+        result: deviceResult(result),
       });
     }
 
@@ -363,7 +384,12 @@ export class HospitalRoom {
       // device's retry will be accepted again instead of reported as a duplicate.
       return this.send(ws, { type: "error", message: "could not save the change; please retry" });
     }
-    this.send(ws, { type: "ack", deviceId: change.deviceId, devSeq: change.devSeq, result });
+    this.send(ws, {
+      type: "ack",
+      deviceId: change.deviceId,
+      devSeq: change.devSeq,
+      result: deviceResult(result),
+    });
     this.broadcastUpdate(result);
     if (change.key.startsWith(USERS_PREFIX)) this.endInvalidSessions();
   }
@@ -446,7 +472,7 @@ export class HospitalRoom {
   /** Send an accepted update to every signed-in socket. */
   private broadcastUpdate(result: SubmitResult): void {
     if (!result.update) return;
-    this.broadcast({ type: "update", update: result.update });
+    this.broadcast({ type: "update", update: deviceUpdate(result.update) });
   }
 
   private broadcast(message: ServerMessage): void {

@@ -193,6 +193,13 @@ export function authorizeChange(
   if (ADMIN_ONLY_COLLECTIONS.includes(collection) && role !== "Admin") {
     return { ok: false, reason: `${collection} can only be changed by an Admin` };
   }
+  if (collection === "users" && change.value !== null) {
+    // The room checks every sign-in against this material, so an account must have it.
+    const v = change.value as Record<string, unknown>;
+    if (typeof v["passwordHash"] !== "string" || typeof v["salt"] !== "string") {
+      return { ok: false, reason: "a staff account needs a password" };
+    }
+  }
   if (APPEND_ONLY_COLLECTIONS.includes(collection)) {
     if (change.value === null)
       return { ok: false, reason: `${collection} entries cannot be deleted` };

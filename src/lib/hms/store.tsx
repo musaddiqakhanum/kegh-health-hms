@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { loadState, loadSyncSnapshot, saveState, saveSyncSnapshot } from "./db";
+import { hashPassword, newSaltHex } from "./crypto";
 import { seedIndianDrugs } from "./medcatalog";
 import { seedPayers } from "./claims";
 import { seedOtProcedures } from "./ot";
@@ -340,7 +341,11 @@ export function HmsProvider({ children }: { children: React.ReactNode }) {
     // hospital's Admin record, offer it (the room takes it only while it has no
     // active Admin). Sent on this retry only, so ordinary sign-ins never send it.
     if (!result.ok && local && local.role === "Admin" && local.active) {
-      result = await session.client.signIn(username, password, local);
+      // The device keeps no password material, so the record it offers carries a
+      // hash of the password just typed.
+      const salt = newSaltHex();
+      const setup = { ...local, salt, passwordHash: await hashPassword(password, salt) };
+      result = await session.client.signIn(username, password, setup);
     }
     return result;
   }, []);

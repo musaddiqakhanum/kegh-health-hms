@@ -26,6 +26,12 @@ import {
 import { COMMON_PROCEDURES } from "@/lib/hms/ot";
 import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/hms/ui";
 import { AdminOnly } from "@/components/hms/gate";
+import {
+  isValidPin,
+  readPinRecords,
+  removePinRecord,
+  setPinRecord,
+} from "@/lib/hms/offline-signin";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -48,7 +54,7 @@ export const Route = createFileRoute("/settings")({
 const ROLES: Role[] = ["Admin", "Reception", "Doctor", "Nursing", "Lab", "Pharmacy", "Billing"];
 
 function SettingsPage() {
-  const { settings, updateSettings, state, mergeIn, upsert } = useHms();
+  const { settings, updateSettings, state, mergeIn, upsert, realtime } = useHms();
   const { user } = useSession();
   const [pin, setPin] = useState(settings.pin);
   const [pass, setPass] = useState(getPassphrase());
@@ -369,6 +375,16 @@ function SettingsPage() {
                       toast.error("Create the first Admin account below before requiring login");
                       return;
                     }
+                    if (
+                      want &&
+                      !realtime.configured &&
+                      !activeUsers(state).some((u) => readPinRecords(window.localStorage)[u.id])
+                    ) {
+                      toast.error(
+                        "On a device with no room, set at least one device PIN below first",
+                      );
+                      return;
+                    }
                     updateSettings({ requireLogin: want });
                     toast.success(
                       want ? "Login required on this device" : "Login no longer required",
@@ -406,6 +422,8 @@ function SettingsPage() {
               behaviour: the role dropdown plus the optional 4-digit device PIN.
             </p>
           </Card>
+
+          {!realtime.configured ? <DevicePinsCard requireLogin={settings.requireLogin} /> : null}
 
           <Card className="space-y-4">
             <h2 className="font-semibold">Accounts</h2>
@@ -945,6 +963,89 @@ function ServiceRatesCard() {
         untouched. The OT list ships with common procedure names but no rates — set your own before
         billing.
       </p>
+    </Card>
+  );
+}
+
+/**
+ * Device sign-in PINs for a device with no room (phase 4b, item 4). With no room
+ * there is no password check, so an Admin sets each staff member's PIN here.
+ */
+function DevicePinsCard({ requireLogin }: { requireLogin: boolean }) {
+  const { state } = useHms();
+  const [, setTick] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const records = readPinRecords(window.localStorage);
+  const accounts = [...activeUsers(state)].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName),
+  );
+  const changed = () => setTick((t) => t + 1);
+
+  const save = async (u: (typeof accounts)[number]) => {
+    const pin = drafts[u.id] ?? "";
+    if (!isValidPin(pin)) {
+      toast.error("PIN must be 4 digits");
+      return;
+    }
+    await setPinRecord(
+      window.localStorage,
+      { id: u.id, username: u.username, role: u.role, displayName: u.displayName },
+      pin,
+      null,
+    );
+    setDrafts((d) => ({ ...d, [u.id]: "" }));
+    changed();
+    toast.success(`PIN set for ${u.displayName} on this device`);
+  };
+
+  const remove = (u: (typeof accounts)[number]) => {
+    const count = Object.keys(readPinRecords(window.localStorage)).length;
+    if (requireLogin && count <= 1) {
+      toast.error("Turn login off before removing the last PIN on this device");
+      return;
+    }
+    removePinRecord(window.localStorage, u.id);
+    changed();
+  };
+
+  return (
+    <Card className="space-y-4">
+      <h2 className="font-semibold">Device sign-in PINs</h2>
+      <p className="text-sm text-muted-foreground">
+        This device has no hospital room, so an Admin sets each staff member&apos;s 4-digit PIN
+        here. With login on, staff sign in with their PIN. PINs stay on this device: they are not
+        synced or backed up. Five wrong PINs clear one.
+      </p>
+      {accounts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No active staff accounts yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {accounts.map((u) => (
+            <div key={u.id} className="flex flex-wrap items-end gap-2 rounded-md border p-2">
+              <div className="min-w-40 flex-1">
+                <p className="text-sm font-medium">{u.displayName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {u.username} · {u.role} · {records[u.id] ? "PIN set" : "No PIN"}
+                </p>
+              </div>
+              <Field label="New PIN">
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  autoComplete="off"
+                  value={drafts[u.id] ?? ""}
+                  onChange={(e) =>
+                    setDrafts((d) => ({ ...d, [u.id]: e.target.value.replace(/\D/g, "") }))
+                  }
+                />
+              </Field>
+              <Button onClick={() => void save(u)}>Save PIN</Button>
+              {records[u.id] ? <Button onClick={() => remove(u)}>Remove PIN</Button> : null}
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

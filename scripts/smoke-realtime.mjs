@@ -1447,6 +1447,37 @@ try {
         cur("admissions:ad1", { id: "ad1" }),
       ).ok,
     );
+    // Staff accounts (phase 4b, item 4): an account must carry its password material.
+    check(
+      "users: a new staff account without a password is refused",
+      !decide(
+        "Admin",
+        ch("users:n1", {
+          id: "n1",
+          username: "n",
+          displayName: "N",
+          role: "Reception",
+          active: true,
+          createdAt: 1,
+        }),
+      ).ok,
+    );
+    check(
+      "users: a new staff account with a password is accepted",
+      decide(
+        "Admin",
+        ch("users:n1", {
+          id: "n1",
+          username: "n",
+          displayName: "N",
+          role: "Reception",
+          active: true,
+          createdAt: 1,
+          passwordHash: "h",
+          salt: "s",
+        }),
+      ).ok,
+    );
     // Coverage: every field of every synced record type (except auditLogs) has an entry in FIELD_RULES.
     {
       const src = readFileSync("src/lib/hms/types.ts", "utf8");
