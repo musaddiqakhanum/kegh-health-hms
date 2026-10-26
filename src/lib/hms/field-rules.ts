@@ -59,11 +59,12 @@ export const FIELD_RULES: Record<string, Grants> = {
   admissions: Object.assign(
     {},
     grant([RECEPTION, NURSING, DOCTOR], "patientId visitId bedId admitDate admitTime status"),
+    grant([RECEPTION, DOCTOR], "reason doctor"), // changed: Reception enters reason and doctor on admission
     grant(
       [DOCTOR],
-      "reason doctor expectedDischarge dischargeDate dischargeTime dischargeSummary dischargeAdvice dischargedBy",
+      "expectedDischarge dischargeDate dischargeTime dischargeSummary dischargeAdvice dischargedBy",
     ),
-    grant([BILLING], "bedChargeBillId"),
+    grant([BILLING, RECEPTION, NURSING, DOCTOR], "bedChargeBillId"), // changed: bed charges are posted by these roles
   ),
   beds: Object.assign(
     {},
@@ -77,7 +78,7 @@ export const FIELD_RULES: Record<string, Grants> = {
     grant([DOCTOR, LAB, NURSING], "status"), // added: an order is created with a status
     grant([LAB, NURSING], "collectedDate collectedTime collectedBy"),
     grant([LAB], "labResultId"),
-    grant([BILLING, LAB, RECEPTION], "labChargeBillId"),
+    grant([BILLING, LAB, RECEPTION, DOCTOR, NURSING], "labChargeBillId"), // changed: charges posted from these roles
   ),
   rads: grant([LAB], "patientId visitId date studyType findings impression radiologist"),
   imagingOrders: Object.assign(
@@ -86,7 +87,7 @@ export const FIELD_RULES: Record<string, Grants> = {
     grant([DOCTOR, LAB, NURSING], "status"), // added: an order is created with a status
     grant([LAB, NURSING], "performedDate performedTime performedBy"),
     grant([LAB], "radId"),
-    grant([BILLING, LAB, RECEPTION], "imagingChargeBillId"),
+    grant([BILLING, LAB, RECEPTION, DOCTOR, NURSING], "imagingChargeBillId"), // changed: charges posted from these roles
   ),
   serviceRates: ADMIN("id section item rate active"),
   pharms: grant(
@@ -105,8 +106,13 @@ export const FIELD_RULES: Record<string, Grants> = {
   grns: grant([PHARMACY], "grnNo date supplier invoiceNo invoiceDate items total receivedBy notes"),
   bills: Object.assign(
     {},
-    grant([BILLING], "items totalAmount discount tax"),
-    grant([BILLING, RECEPTION], "paid due paymentMode patientId visitId date payerId payerName"),
+    grant([BILLING], "discount tax"),
+    grant([BILLING, RECEPTION], "paid payerId payerName"),
+    // changed: charges are posted to bills by these roles (lab, imaging, IPD bed charges, Billing)
+    grant(
+      [BILLING, RECEPTION, LAB, DOCTOR, NURSING],
+      "items totalAmount due paymentMode patientId visitId date",
+    ),
   ),
   payers: grant([BILLING], "name type code contact settlementDays active notes"),
   claims: grant(

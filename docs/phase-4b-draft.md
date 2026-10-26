@@ -129,3 +129,16 @@ Risks to test in the browser:
 - Bill `items` are Billing-only. Check whether Reception creates bills.
 
 Coverage: `scripts/smoke-realtime.mjs` fails if any field of any synced record type (other than `auditLogs`) has no entry in `FIELD_RULES`.
+
+## 5. Changes after the item 3 risk review
+
+Found by reading the screens against the rules, before any browser test. Decided by the user:
+
+- Bill items and totals: Reception, Lab, Doctor and Nursing may write them. These are the roles whose screens post charges (lab orders, imaging orders, IPD bed charges, Billing). Discount and tax stay Billing-only.
+- Bill fields written when a charge creates a bill (`patientId`, `visitId`, `date`, `due`, `paymentMode`) are granted to the same roles. The approved decision named only items and totals, so these are an addition. They are needed for the charge flows to work.
+- Charge links back to the order or admission (`labChargeBillId`, `imagingChargeBillId`, `bedChargeBillId`) are granted to the roles that post them. Doctor and Nursing are added to the first two, and Reception, Nursing and Doctor to the third.
+- Admissions `reason` and `doctor`: Reception may write them.
+
+Not decided, left as the matrix in section 1 (Doctor-only):
+
+- IPD discharge (`dischargeDate`, `dischargeTime`, `dischargeSummary`, `dischargeAdvice`, `dischargedBy`, `expectedDischarge`, and the visit `dischargeDate`). The Discharge button appears to every role on the IPD page, so Reception and Nursing discharges will be refused. The smoke suite records this as the current rule.

@@ -1213,8 +1213,8 @@ try {
       decide("Billing", upd("bills:b1", { ...bill, items: [{ n: 2 }] }), cur("bills:b1", bill)).ok,
     );
     check(
-      "fields: Reception may not change bill items",
-      !decide("Reception", upd("bills:b1", { ...bill, items: [{ n: 2 }] }), cur("bills:b1", bill))
+      "fields: Reception may change bill items (charge posting, approved)",
+      decide("Reception", upd("bills:b1", { ...bill, items: [{ n: 2 }] }), cur("bills:b1", bill))
         .ok,
     );
     check(
@@ -1334,6 +1334,92 @@ try {
       "fields: a field with no rule is refused for everyone but Admin",
       !decide("Reception", ch("patients:p9", { name: "x", surprise: "y" })).ok &&
         decide("Admin", ch("patients:p9", { name: "x", surprise: "y" })).ok,
+    );
+    // Charge posting (approved in phase 4b, item 3): the lab, imaging and IPD flows
+    // write bills with items, and link the charge back onto the order or admission.
+    const chargeBill = {
+      id: "bl1",
+      patientId: "p1",
+      visitId: "v1",
+      date: "2026-10-01",
+      items: [{ n: 1 }],
+      totalAmount: 50,
+      discount: 0,
+      tax: 0,
+      paid: 0,
+      due: 50,
+      paymentMode: "Cash",
+      createdAt: 1,
+    };
+    check(
+      "fields: Lab may post a lab charge as a new bill",
+      decide("Lab", ch("bills:bl1", chargeBill)).ok,
+    );
+    check(
+      "fields: Lab may link the lab charge to its order",
+      decide(
+        "Lab",
+        upd("labOrders:lo1", { ...order, labChargeBillId: "bl1" }),
+        cur("labOrders:lo1", order),
+      ).ok,
+    );
+    check(
+      "fields: Nursing may post a bed charge as a new bill",
+      decide("Nursing", ch("bills:bl1", chargeBill)).ok,
+    );
+    check(
+      "fields: Doctor may post a bed charge and link it to the admission",
+      decide(
+        "Doctor",
+        upd("admissions:ad1", { id: "ad1", bedChargeBillId: "bl1" }),
+        cur("admissions:ad1", { id: "ad1" }),
+      ).ok,
+    );
+    check(
+      "fields: Pharmacy may not post a charge to a bill",
+      !decide("Pharmacy", ch("bills:bl1", chargeBill)).ok,
+    );
+    check(
+      "fields: Reception may not write a bill's discount",
+      !decide("Reception", ch("bills:bl1", { ...chargeBill, discount: 5 })).ok,
+    );
+    check(
+      "fields: Billing may write a bill's discount",
+      decide("Billing", ch("bills:bl1", { ...chargeBill, discount: 5 })).ok,
+    );
+    check(
+      "fields: Reception may admit a patient with a reason and doctor",
+      decide(
+        "Reception",
+        ch("admissions:ad2", {
+          id: "ad2",
+          patientId: "p1",
+          bedId: "bd1",
+          admitDate: "2026-10-01",
+          admitTime: "08:00",
+          reason: "fever",
+          doctor: "Dr A",
+          status: "Admitted",
+        }),
+      ).ok,
+    );
+    check(
+      "fields: Nursing may not write an admission's reason",
+      !decide(
+        "Nursing",
+        upd("admissions:ad1", { id: "ad1", reason: "fever" }),
+        cur("admissions:ad1", { id: "ad1" }),
+      ).ok,
+    );
+    // Known gap, not yet decided: the IPD discharge writes Doctor-only fields, and the
+    // Discharge button is shown to every role on the IPD page. This records the current rule.
+    check(
+      "fields: Reception may not write a discharge summary (current rule, decision pending)",
+      !decide(
+        "Reception",
+        upd("admissions:ad1", { id: "ad1", dischargeSummary: "ok" }),
+        cur("admissions:ad1", { id: "ad1" }),
+      ).ok,
     );
     // Coverage: every field of every synced record type (except auditLogs) has an entry in FIELD_RULES.
     {
