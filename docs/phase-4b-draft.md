@@ -142,3 +142,22 @@ Found by reading the screens against the rules, before any browser test. Decided
 Not decided, left as the matrix in section 1 (Doctor-only):
 
 - IPD discharge (`dischargeDate`, `dischargeTime`, `dischargeSummary`, `dischargeAdvice`, `dischargedBy`, `expectedDischarge`, and the visit `dischargeDate`). The Discharge button appears to every role on the IPD page, so Reception and Nursing discharges will be refused. The smoke suite records this as the current rule.
+
+## 6. Item 4 build status (device sign-in PINs, no password material on devices)
+
+Built as section 2 describes, with these decisions from the user and the changes they led to:
+
+- **Room only holds hashes.** The room strips `passwordHash` and `salt` from every `users` record it sends (catch-up, updates and acks). An edit that leaves out the password material keeps the stored material, so a rename or role change does not lock the account out. A staff account without a password is refused.
+- **Devices, backups and Drive files hold none.** The local database strips it on save and on load (this also removes hashes saved by earlier versions). `.keg` exports and Drive files strip it, and imports strip it again.
+- **PIN sign-in.** A 4-digit PIN is stored per staff member on this device, as a salted PBKDF2 hash, in localStorage. It is not synced or backed up. The first password sign-in on a device asks for the PIN. Later sign-ins do not. Five wrong PINs clear that account's record on a device with a room. A PIN lasts 12 hours after the last room sign-in on that device.
+- **Devices with no room.** No password check is possible, so an Admin sets each staff member's PIN in Settings > Device sign-in PINs. PINs set this way do not expire. Five wrong PINs do not clear them. This avoids locking the device out, and the device's own 60-second lockout applies instead.
+- **Login gate guards.** Login cannot be turned on for a device with no room until at least one PIN is set. The last PIN cannot be removed while login is on for a device with no room.
+- **Backup restore.** A restored backup keeps this device's PINs (they are device-local). A restored account on a new device has no PIN until a room sign-in there, or an Admin sets one on a device with no room.
+
+Risk accepted by the user (recorded here and in the PR): a 4-digit PIN is a weak offline secret. Someone who copies the device's storage can try all 10,000 PINs offline in minutes. The hash uses PBKDF2 with 100,000 iterations, the same as passwords.
+
+Limits and open points:
+
+- Passwords set in Settings > Accounts on a device with no room are not used there. Only PINs sign in on such a device.
+- Unsent changes in the device's outbox can still hold a new account's password material until the room accepts them. The outbox is device-local.
+- Browser checks (sign in with the room up, go offline, unlock with the PIN) were not run in this build. Smoke and room checks cover the rules.

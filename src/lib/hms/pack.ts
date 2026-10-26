@@ -1,5 +1,6 @@
 import { deflate, inflate } from "pako";
 import type { HmsState } from "./types";
+import { stripStateUserSecrets } from "./user-secrets";
 
 const MAGIC_PLAIN = "KEG1";
 const MAGIC_ENC = "KEGE";
@@ -23,7 +24,8 @@ async function deriveKey(passphrase: string, salt: Uint8Array) {
 
 /** Serialize state -> gzip -> optional AES-256-GCM. Returns bytes for a .keg file. */
 export async function packState(state: HmsState, passphrase?: string): Promise<Uint8Array> {
-  const compressed = deflate(JSON.stringify(state), { level: 9 });
+  // Backups and Drive files never carry password material (phase 4b, item 4).
+  const compressed = deflate(JSON.stringify(stripStateUserSecrets(state)), { level: 9 });
   if (!passphrase) {
     const out = new Uint8Array(4 + compressed.length);
     out.set(strToBytes(MAGIC_PLAIN), 0);
@@ -45,6 +47,10 @@ export async function packState(state: HmsState, passphrase?: string): Promise<U
 }
 
 export async function unpackState(bytes: Uint8Array, passphrase?: string): Promise<HmsState> {
+  return stripStateUserSecrets(await unpackRaw(bytes, passphrase));
+}
+
+async function unpackRaw(bytes: Uint8Array, passphrase?: string): Promise<HmsState> {
   const magic = new TextDecoder().decode(bytes.slice(0, 4));
   if (magic === MAGIC_PLAIN) {
     return JSON.parse(new TextDecoder().decode(inflate(bytes.slice(4)))) as HmsState;

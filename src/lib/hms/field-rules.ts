@@ -53,16 +53,18 @@ export const FIELD_RULES: Record<string, Grants> = {
   visits: Object.assign(
     {},
     grant([RECEPTION, DOCTOR, NURSING], "patientId"), // added: the roles that open visits
-    grant([RECEPTION, DOCTOR], "date type doctor department admissionDate dischargeDate"),
-    grant([DOCTOR], "diagnosis notes procedures followUp"),
+    grant([RECEPTION, DOCTOR], "date type doctor department admissionDate"),
+    grant([RECEPTION, DOCTOR, NURSING], "dischargeDate"), // changed: discharge is open to these roles
+    grant([DOCTOR], "diagnosis notes procedures"),
+    grant([DOCTOR, RECEPTION, NURSING], "followUp"), // changed: discharge writes the follow-up advice
   ),
   admissions: Object.assign(
     {},
     grant([RECEPTION, NURSING, DOCTOR], "patientId visitId bedId admitDate admitTime status"),
     grant([RECEPTION, DOCTOR], "reason doctor"), // changed: Reception enters reason and doctor on admission
     grant(
-      [DOCTOR],
-      "expectedDischarge dischargeDate dischargeTime dischargeSummary dischargeAdvice dischargedBy",
+      [DOCTOR, RECEPTION, NURSING],
+      "expectedDischarge dischargeDate dischargeTime dischargeSummary dischargeAdvice dischargedBy", // changed: discharge is open to these roles
     ),
     grant([BILLING, RECEPTION, NURSING, DOCTOR], "bedChargeBillId"), // changed: bed charges are posted by these roles
   ),

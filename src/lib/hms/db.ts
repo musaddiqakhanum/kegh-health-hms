@@ -1,6 +1,7 @@
 import { createStore, get, set } from "idb-keyval";
 import { emptyState, type HmsState } from "./types";
 import type { DeviceSnapshot } from "./sync-core";
+import { stripStateUserSecrets } from "./user-secrets";
 
 const SYNC_PREFIX = "sync:";
 
@@ -11,7 +12,8 @@ export async function loadState(): Promise<HmsState> {
   try {
     const raw = (await get<HmsState>(KEY, store)) ?? null;
     if (!raw) return emptyState();
-    return { ...emptyState(), ...raw };
+    // Devices keep no password material, including states saved by older versions.
+    return stripStateUserSecrets({ ...emptyState(), ...raw });
   } catch {
     return emptyState();
   }
@@ -19,7 +21,7 @@ export async function loadState(): Promise<HmsState> {
 
 export async function saveState(state: HmsState): Promise<void> {
   try {
-    await set(KEY, state, store);
+    await set(KEY, stripStateUserSecrets(state), store);
   } catch (err) {
     console.error("Failed to persist state", err);
   }

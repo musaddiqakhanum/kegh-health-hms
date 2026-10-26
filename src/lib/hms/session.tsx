@@ -1,8 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { findUserByUsername } from "./selectors";
 import { useHms } from "./store";
-import { verifyPassword } from "./crypto";
+import {
+  checkPin,
+  findPinRecord,
+  isValidPin,
+  markRoomSignIn,
+  setPinRecord,
+  type PinStorage,
+} from "./offline-signin";
 import {
   idleTimedOut,
   readFailures,
@@ -13,7 +19,7 @@ import {
   writeSessionId,
   type LoginOutcome,
 } from "./session-context";
-import type { AuditLog, User } from "./types";
+import type { AuditLog } from "./types";
 
 /**
  * Per-device staff login session.
@@ -23,12 +29,23 @@ import type { AuditLog, User } from "./types";
  * role drives the nav and the AdminOnly gates exactly like `settings.role`
  * did; when nobody is signed in (or login is not required) the app falls
  * back to `settings.role` as before.
+ *
+ * Two ways in (phase 4b, item 4):
+ * - Staff password, checked by the room. Needs a room connection.
+ * - Device PIN, checked on this device. Works offline, for 12 hours after the
+ *   last room sign-in on this device.
+ * The device keeps no password material.
  */
 
 /** Failed attempts on this device before a brief lockout kicks in. */
 const MAX_FAILURES = 5;
 /** How long the device stays locked after `MAX_FAILURES` failures. */
 const LOCKOUT_MS = 60_000;
+
+/** The device's PIN records, in localStorage (never synced or backed up). */
+function localPinStorage(): PinStorage {
+  return window.localStorage;
+}
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const { state, settings, upsert, realtime, realtimeSignIn, realtimeSignOut } = useHms();
@@ -50,13 +67,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef(user);
   userRef.current = user;
 
-  // A session pointing at a removed or disabled account is simply dropped.
+  // A session pointing at a removed or disabled account is dropped. Wait until
+  // the device has any users: a first room sign-in can land before catch-up.
   useEffect(() => {
-    if (sessionId && !user) {
+    if (sessionId && !user && Object.keys(state.users).length > 0) {
       setSessionId(null);
       writeSessionId(null);
     }
-  }, [sessionId, user]);
+  }, [sessionId, user, state.users]);
 
   const writeAudit = useCallback(
     (action: "login" | "logout", userId: string, role: string) => {
@@ -116,46 +134,77 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [dropSession]);
 
+  const startSession = useCallback(
+    (userId: string, role: string, now: number) => {
+      writeFailures({ count: 0, until: 0 });
+      writeSessionId(userId, now);
+      setSessionId(userId);
+      setSignedInAt(now);
+      lastActivityRef.current = now;
+      writeAudit("login", userId, role);
+    },
+    [writeAudit],
+  );
+
+  /** Staff password, checked by the room. A first sign-in here sets the device PIN from `newPin`. */
   const login = useCallback(
-    async (username: string, password: string): Promise<LoginOutcome> => {
+    async (username: string, password: string, newPin?: string): Promise<LoginOutcome> => {
       const now = Date.now();
       const f = readFailures();
       if (f.until > now) {
         return { ok: false, error: "locked", lockSeconds: Math.ceil((f.until - now) / 1000) };
       }
+      if (!realtime.configured) return { ok: false, error: "no-room" };
 
-      const candidate = findUserByUsername(stateRef.current, username);
-      const valid =
-        candidate && candidate.active
-          ? await verifyPassword(password, candidate.salt, candidate.passwordHash)
-          : false;
+      const pins = localPinStorage();
+      const needsPin = findPinRecord(pins, username) === undefined;
+      if (needsPin && (!newPin || !isValidPin(newPin))) return { ok: false, error: "pin-needed" };
 
-      if (!valid) {
+      const r = await realtimeSignIn(username, password);
+      if (!r.ok) {
         const count = f.count + 1;
-        // Same generic failure for unknown usernames, disabled accounts and
-        // wrong passwords — no username enumeration.
         writeFailures(
           count >= MAX_FAILURES ? { count: 0, until: now + LOCKOUT_MS } : { count, until: 0 },
         );
-        return { ok: false, error: "invalid" };
+        return { ok: false, error: "room", message: r.error };
       }
 
-      const u = candidate as User;
-      writeFailures({ count: 0, until: 0 });
-      writeSessionId(u.id, now);
-      setSessionId(u.id);
-      setSignedInAt(now);
-      lastActivityRef.current = now;
-      writeAudit("login", u.id, u.role);
-      if (realtime.configured) {
-        // Sign in to the room with the same password (the room checks it again).
-        void realtimeSignIn(username, password).then((r) => {
-          if (!r.ok) toast.error(`Not signed in to the hospital room: ${r.error}`);
-        });
+      const { id, role, displayName } = r.user;
+      if (needsPin && newPin) {
+        await setPinRecord(pins, { id, username: r.user.username, role, displayName }, newPin, now);
+      } else {
+        markRoomSignIn(pins, id, now);
       }
-      return { ok: true, user: u };
+      startSession(id, role, now);
+      return { ok: true, userId: id, role };
     },
-    [writeAudit, realtime.configured, realtimeSignIn],
+    [realtime.configured, realtimeSignIn, startSession],
+  );
+
+  /** Device PIN, checked on this device. Works without a room, within the offline window. */
+  const loginWithPin = useCallback(
+    async (username: string, pin: string): Promise<LoginOutcome> => {
+      const now = Date.now();
+      const f = readFailures();
+      if (f.until > now) {
+        return { ok: false, error: "locked", lockSeconds: Math.ceil((f.until - now) / 1000) };
+      }
+      const check = await checkPin(localPinStorage(), username, pin, now);
+      if (!check.ok) {
+        if (check.error === "expired") return { ok: false, error: "expired" };
+        const count = f.count + 1;
+        writeFailures(
+          count >= MAX_FAILURES ? { count: 0, until: now + LOCKOUT_MS } : { count, until: 0 },
+        );
+        return { ok: false, error: check.error === "cleared" ? "cleared" : "invalid" };
+      }
+      // The account must still exist and be active on this device.
+      const current = stateRef.current.users[check.record.userId];
+      if (!current || !current.active) return { ok: false, error: "invalid" };
+      startSession(current.id, current.role, now);
+      return { ok: true, userId: current.id, role: current.role };
+    },
+    [startSession],
   );
 
   const logout = useCallback(() => {
@@ -165,6 +214,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     realtimeSignOut();
   }, [user, writeAudit, realtimeSignOut]);
 
-  const value = useMemo(() => ({ user, login, logout }), [user, login, logout]);
+  const value = useMemo(
+    () => ({ user, login, loginWithPin, logout }),
+    [user, login, loginWithPin, logout],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

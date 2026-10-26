@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { User } from "./types";
+import type { Role, User } from "./types";
 
 /**
  * Per-device staff login session plumbing shared between the provider
@@ -10,9 +10,19 @@ const SESSION_KEY = "kegh-hms-session";
 const FAILURES_KEY = "kegh-hms-login-failures";
 
 export type LoginOutcome =
-  | { ok: true; user: User }
+  | { ok: true; userId: string; role: Role }
   | { ok: false; error: "invalid" }
-  | { ok: false; error: "locked"; lockSeconds: number };
+  | { ok: false; error: "locked"; lockSeconds: number }
+  /** Password sign-in needs a room; this device has none. Use the device PIN. */
+  | { ok: false; error: "no-room" }
+  /** First password sign-in on this device: enter a 4-digit PIN to set it. */
+  | { ok: false; error: "pin-needed" }
+  /** The room refused the sign-in; `message` is the room's text. */
+  | { ok: false; error: "room"; message: string }
+  /** The 12-hour offline window for this PIN has passed; sign in with the room. */
+  | { ok: false; error: "expired" }
+  /** Five wrong PINs: this device's PIN for the account was cleared. */
+  | { ok: false; error: "cleared" };
 
 interface Failures {
   count: number;
@@ -85,7 +95,10 @@ export function idleTimedOut(lastActivity: number, now: number, idleMinutes: num
 export interface SessionCtx {
   /** The signed-in user, or null when logged out / no session. */
   user: User | null;
-  login: (username: string, password: string) => Promise<LoginOutcome>;
+  /** Room sign-in with the staff password. `newPin` sets the device PIN on a first sign-in here. */
+  login: (username: string, password: string, newPin?: string) => Promise<LoginOutcome>;
+  /** Offline sign-in with the device PIN for this account. */
+  loginWithPin: (username: string, pin: string) => Promise<LoginOutcome>;
   logout: () => void;
 }
 
