@@ -110,3 +110,22 @@ The app's own page checks stay. The room becomes the enforcer, so a refused chan
 2. Offline PIN length: 4 digits (the app's current PIN) or 6 or more.
 3. Offline session length: 12 hours (proposed) or shorter.
 4. Confirm that backups and Drive files will leave out password hashes, which means a restored backup has no offline sign-in until the next room sign-in.
+
+## 4. Item 3 build status
+
+Built as section 1 describes, with these additions and deviations from the approved matrix:
+
+- `mrn` on patients: Reception.
+- `status` on labOrders and imagingOrders: Doctor, Lab, Nursing.
+- `status` on surgeries: Reception, Doctor, Nursing.
+- Visit `patientId`: Reception, Doctor, Nursing.
+- Handover `resolved`, `resolvedBy`, `resolvedAt`: all roles (so anyone can mark a handover done).
+- `beds.rate` and `serviceRates`: Admin only, stated explicitly.
+- Handover `author` is create-only, so a handover note cannot be re-attributed, and non-Admin roles cannot delete one.
+
+Risks to test in the browser:
+
+- Admissions `reason` and `doctor` are Doctor-only in the draft. If Reception admits patients with those fields, the admission is refused.
+- Bill `items` are Billing-only. Check whether Reception creates bills.
+
+Coverage: `scripts/smoke-realtime.mjs` fails if any field of any synced record type (other than `auditLogs`) has no entry in `FIELD_RULES`.

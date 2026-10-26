@@ -504,9 +504,7 @@ async function main() {
   const probe = connect("devProbe");
   const probeResults = [];
   for (let i = 0; i < 6; i++) {
-    probeResults.push(
-      await probe.login({ username: "check-nobody", password: `guess-${i}` }),
-    );
+    probeResults.push(await probe.login({ username: "check-nobody", password: `guess-${i}` }));
   }
   check(
     "an unknown name is locked on the sixth attempt too",
@@ -532,6 +530,53 @@ async function main() {
     burstReplies.length === 8 && burstWrong === 5 && burstLocked === 3,
   );
   burst.close();
+
+  // ---- per-field rules at the room -------------------------------------------
+  // An Admin creates a patient with clinical fields. A Reception change to allergies
+  // is refused (nothing logged); a Reception change to the phone number is accepted.
+  const rbacRecord = {
+    id: "rbac1",
+    name: "Ana",
+    mrn: "R1",
+    dob: "1990-01-01",
+    gender: "F",
+    phone: "1",
+    address: "",
+    fatherName: "",
+    bloodGroup: "O+",
+    allergies: "none",
+    doctor: "",
+    createdAt: 1,
+  };
+  const madeRbac = await a.submit(manual("devA", "patients:rbac1", rbacRecord, null));
+  check("an Admin creates a patient with clinical fields", madeRbac.result.outcome === "accepted");
+  const rbacTs = madeRbac.result.update.current.ts;
+  // A fresh Reception account: check-reception was deactivated above.
+  const CLERK = { username: "check-clerk", password: "check-clerk-pass" };
+  const clerkRecord = await makeUser(CLERK, "Reception");
+  const ackClerk = await a.submit(devA.write(`users:${clerkRecord.id}`, clerkRecord, Date.now()));
+  check(
+    "an Admin creates a Reception account for the field check",
+    ackClerk.result.outcome === "accepted",
+  );
+  const recep = connect("devRecep");
+  const recepSigned = await recep.login(CLERK);
+  check("the Reception account signs in for the field check", recepSigned.type === "session");
+  const refusedAllergy = await recep.submit(
+    manual("devRecep", "patients:rbac1", { ...rbacRecord, allergies: "dust" }, rbacTs),
+  );
+  check(
+    "the room refuses a Reception change to allergies",
+    refusedAllergy.result.outcome === "denied",
+  );
+  const acceptedPhone = await recep.submit(
+    manual("devRecep", "patients:rbac1", { ...rbacRecord, phone: "2" }, rbacTs),
+  );
+  check(
+    "the room accepts a Reception change to the phone number",
+    acceptedPhone.result.outcome === "accepted",
+  );
+  recep.close();
 
   // Save the history as it is now (after the throttle check added its account).
   const catchEnd = await a.hello(0);
