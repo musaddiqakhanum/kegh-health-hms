@@ -78,7 +78,7 @@ Settled on 2026-10-24 (phase 4 approval):
 
 - **Role rules are per collection, not per field or per action.** A Reception account can still change any patient field the app lets it change. The app's own page checks still apply on the device, but the room does not enforce them. Finer rules are a later change.
 - **Password hashes reach every signed-in device.** `users` is synced so that staff can sign in anywhere, which means every device holds the PBKDF2 hashes. This was already true of the local app data and Drive backups. Hashes are no secret from a device that is signed in.
-- **No login rate limit in the room.** The device locks out after five failed attempts (per device). The room itself does not limit guesses, so the room token is the only gate in front of a password guess.
+- **Sign-in throttle in the room (added after phase 4).** The room counts sign-in attempts per username, including unknown names. The sixth attempt in 15 minutes locks that name for 15 minutes, and a lock survives a restart. Each device's own sign-in also locks for 60 seconds after five failures. Trade-off: anyone with the room token can lock a staff name for 15 minutes. Details are in `sync-worker/README.md`.
 - **The first-admin window.** Until a room has an active Admin, anyone with the room token can create the first Admin account. Create the room, then sign in on a trusted device straight away.
 - **Session token in `sessionStorage`.** A token survives a reload in the same tab, not a closed tab. After a browser restart the device signs in to the room again.
 - **Sign-in needs the Admin device's records.** A device with no local Admin account cannot make the room's first admin. The app needs at least one Admin account before real-time sync is turned on.

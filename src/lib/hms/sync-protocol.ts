@@ -26,7 +26,8 @@ export type ClientMessage =
   | { type: "ping" };
 
 /** Error codes the device acts on. Anything else is shown as text only. */
-export type ErrorCode = "sign-in-required" | "invalid-login" | "not-configured";
+export type ErrorCode =
+  "sign-in-required" | "invalid-login" | "too-many-attempts" | "not-configured";
 
 export type ServerMessage =
   | { type: "catchup"; updates: Update[]; lastSeq: number }

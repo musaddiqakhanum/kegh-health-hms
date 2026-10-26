@@ -358,7 +358,7 @@ export class RealtimeClient {
           this.setStatus("sign-in");
           return;
         }
-        if (code === "invalid-login") {
+        if (code === "invalid-login" || code === "too-many-attempts") {
           this.needsSignIn = true;
           this.settleLogin({ ok: false, error: message });
           this.teardownSocket();

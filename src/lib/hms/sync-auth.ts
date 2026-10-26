@@ -9,7 +9,8 @@
  *  - Policy: what each role may change. Checked by the room for every change.
  */
 import { verifyPassword } from "./crypto";
-import { splitKey } from "./realtime-state";
+import { changedFields, splitKey } from "./realtime-state";
+import { CREATE_ONLY_FIELDS, FIELD_RULES } from "./field-rules";
 import type { Change, Version } from "./sync-core";
 import type { Role, User } from "./types";
 
@@ -199,5 +200,54 @@ export function authorizeChange(
       return { ok: false, reason: `${collection} entries cannot be changed once written` };
     }
   }
+  if (role === "Admin") return { ok: true };
+
+  // Field rules: every field this change writes must be allowed for the role.
+  const rules = FIELD_RULES[collection];
+  if (!rules) return { ok: true };
+  const createOnly = CREATE_ONLY_FIELDS[collection] ?? [];
+  const wasWritten = current !== undefined && current.value !== null;
+  for (const field of writtenFields(change, current)) {
+    if (wasWritten && createOnly.includes(field)) {
+      return { ok: false, reason: `${collection}.${field} is set when the record is created` };
+    }
+    const allowed = rules[field] ?? [];
+    if (!allowed.includes(role)) {
+      return { ok: false, reason: `${role} may not change ${collection}.${field}` };
+    }
+  }
   return { ok: true };
+}
+
+/** Empty values are not writes: a new record's blank fields do not need a rule. */
+function isEmptyValue(v: unknown): boolean {
+  if (v === undefined || v === null || v === "" || v === false || v === 0) return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
+/**
+ * The fields a change writes. A create writes its non-empty fields. An update
+ * writes the fields that differ from the room's version. A delete writes every
+ * non-empty field of the record it removes.
+ */
+function writtenFields(change: Change, current: Version | undefined): string[] {
+  const before =
+    current !== undefined && current.value !== null && typeof current.value === "object"
+      ? (current.value as Record<string, unknown>)
+      : null;
+  if (change.value === null) {
+    if (!before) return [];
+    return Object.keys(before).filter(
+      (f) => f !== "id" && f !== "createdAt" && !isEmptyValue(before[f]),
+    );
+  }
+  if (!before) {
+    const after = change.value as Record<string, unknown>;
+    return Object.keys(after).filter(
+      (f) => f !== "id" && f !== "createdAt" && !isEmptyValue(after[f]),
+    );
+  }
+  return changedFields(before, change.value).map((c) => c.field);
 }

@@ -19,6 +19,7 @@ try {
       "src/lib/hms/realtime-state.ts",
       "src/lib/hms/realtime.ts",
       "src/lib/hms/sync-auth.ts",
+      "src/lib/hms/field-rules.ts",
       "src/lib/hms/shadow.ts",
       "--outDir",
       dir,
@@ -442,8 +443,11 @@ try {
     const dropped = new DeviceSync("D", 0);
     check(
       "a snapshot after a counter restart does not reuse seqs",
-      Number.isInteger(DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq) &&
-        DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq >= 1,
+      Number.isInteger(
+        DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq,
+      ) &&
+        DeviceSync.fromSnapshot({ ...dropped.snapshot(), devSeq: 0 }).write("x:1", 1, 1).devSeq >=
+          1,
     );
   }
 
@@ -603,7 +607,9 @@ try {
     // old copy into a conflict.
     const connectRun = (room, device, snapshotState, bulk) => {
       const reconcile = new rs.ConnectReconcile();
-      reconcile.begin(rs.unsyncedEntries(snapshotState, (k) => device.version(k), device.pendingKeys(), 9000));
+      reconcile.begin(
+        rs.unsyncedEntries(snapshotState, (k) => device.version(k), device.pendingKeys(), 9000),
+      );
       if (bulk) reconcile.queue(rs.localEntries(bulk, 9000));
       for (const u of room.since(0)) device.receive(u);
       for (const e of reconcile.finish((k) => device.version(k), device.pendingKeys())) {
@@ -630,7 +636,11 @@ try {
       const room2 = new RoomLog();
       const y2 = new DeviceSync("Y", 0);
       room2.submit(y2.write("patients:p1", { ...p1, name: "Room name" }, 200));
-      const newer = { ...base, patients: { p1: { ...p1, name: "Drive name" } }, ops: { "patients:p1": 300 } };
+      const newer = {
+        ...base,
+        patients: { p1: { ...p1, name: "Drive name" } },
+        ops: { "patients:p1": 300 },
+      };
       connectRun(room2, new DeviceSync("X", 1000), newer, null);
       check(
         "connect: a newer never-synced copy is still flagged as a conflict",
@@ -643,7 +653,10 @@ try {
       room3.submit(y3.write("patients:p1", { ...p1, name: "Room name" }, 200));
       const merged = {
         ...base,
-        patients: { p1: { ...p1, name: "Merged name" }, p2: { id: "p2", name: "Only in Drive", createdAt: 150 } },
+        patients: {
+          p1: { ...p1, name: "Merged name" },
+          p2: { id: "p2", name: "Only in Drive", createdAt: 150 },
+        },
         ops: { "patients:p1": 300, "patients:p2": 150 },
       };
       const x3 = new DeviceSync("X", 1000);
@@ -655,82 +668,96 @@ try {
       );
 
       // Reload: the snapshot is saved on a delay, so a reload soon after a change
-    // restores an older counter. The next edit must not reuse a sequence number the
-    // room has already seen, or the room drops it as a duplicate and the edit is lost.
-    {
-      const room = new RoomLog();
-      const d = new DeviceSync("R", 1000);
-      const early = d.snapshot();
-      const c1 = d.write("patients:p1", { ...p1, name: "Before reload" }, 2000);
-      d.ack(c1, room.submit(c1));
-      const restored = DeviceSync.fromSnapshot(early);
-      const c2 = restored.write("patients:p1", { ...p1, name: "After reload" }, 3000);
-      const r2 = room.submit(c2);
-      check(
-        "reload: an edit made right after a reload is not dropped as a duplicate",
-        r2.outcome !== "duplicate" && room.get("patients:p1")?.value?.name === "After reload",
-      );
-    }
-    // Phase 6: shadow run. Compare a Drive state with the room's versions (read-only).
-    {
-      const sh = require(join(dir, "lib/hms/shadow.js"));
-      const live = (id, ts, name) => ({ key: `patients:${id}`, value: { id, name }, ts });
-      const drive = {
-        ...base,
-        patients: {
-          same: { id: "same", name: "S" },
-          onlyD: { id: "onlyD", name: "D" },
-          dNew: { id: "dNew", name: "Drive" },
-          rNew: { id: "rNew", name: "Drive" },
-          tie: { id: "tie", name: "Drive" },
-        },
-        staff: { s1: { id: "s1", name: "Staff" } },
-        ops: {
-          "patients:same": 100,
-          "patients:onlyD": 100,
-          "patients:dNew": 300,
-          "patients:rNew": 100,
-          "patients:tie": 100,
-          "staff:s1": 100,
-        },
-        deleted: { "patients:gone": 300, "patients:fresh": 300 },
-      };
-      const room = new Map(
-        [
-          { key: "patients:same", ts: 100, value: { id: "same", name: "S" } },
-          { key: "patients:dNew", ts: 200, value: { id: "dNew", name: "Room" } },
-          { key: "patients:rNew", ts: 200, value: { id: "rNew", name: "Room" } },
-          { key: "patients:tie", ts: 100, value: { id: "tie", name: "Room" } },
-          { key: "patients:gone", ts: 200, value: { id: "gone", name: "Room" } },
-          { key: "patients:onlyR", ts: 100, value: { id: "onlyR", name: "Room" } },
-          { key: "patients:roomDel", ts: 150, value: null },
-        ].map((v) => [v.key, { ...v, deviceId: "Y", seq: 1 }]),
-      );
-      const before = JSON.stringify(drive);
-      const rep = sh.compareWithRoom(drive, (k) => room.get(k), [...room.keys()]);
-      check(
-        "shadow: each record lands in the right category",
-        JSON.stringify(rep.patients) ===
-          JSON.stringify({ same: 1, onlyDrive: 1, onlyRoom: 1, driveNewer: 2, roomNewer: 1, sameTime: 1 }),
-      );
-      check(
-        "shadow: a Drive-only record in another collection is counted",
-        JSON.stringify(rep.staff) ===
-          JSON.stringify({ same: 0, onlyDrive: 1, onlyRoom: 0, driveNewer: 0, roomNewer: 0, sameTime: 0 }),
-      );
-      check(
-        "shadow: a record deleted on both sides is not counted",
-        rep.patients.onlyRoom === 1 && sh.totalsOf(rep).onlyDrive === 2,
-      );
-      check("shadow: the comparison does not change its input", JSON.stringify(drive) === before);
-      const empty = sh.compareWithRoom(drive, () => undefined, []);
-      check(
-        "shadow: an empty room shows every live Drive record as only in Drive",
-        sh.totalsOf(empty).onlyDrive === 6 && sh.totalsOf(empty).onlyRoom === 0,
-      );
-    }
+      // restores an older counter. The next edit must not reuse a sequence number the
+      // room has already seen, or the room drops it as a duplicate and the edit is lost.
+      {
+        const room = new RoomLog();
+        const d = new DeviceSync("R", 1000);
+        const early = d.snapshot();
+        const c1 = d.write("patients:p1", { ...p1, name: "Before reload" }, 2000);
+        d.ack(c1, room.submit(c1));
+        const restored = DeviceSync.fromSnapshot(early);
+        const c2 = restored.write("patients:p1", { ...p1, name: "After reload" }, 3000);
+        const r2 = room.submit(c2);
+        check(
+          "reload: an edit made right after a reload is not dropped as a duplicate",
+          r2.outcome !== "duplicate" && room.get("patients:p1")?.value?.name === "After reload",
+        );
+      }
+      // Phase 6: shadow run. Compare a Drive state with the room's versions (read-only).
+      {
+        const sh = require(join(dir, "lib/hms/shadow.js"));
+        const live = (id, ts, name) => ({ key: `patients:${id}`, value: { id, name }, ts });
+        const drive = {
+          ...base,
+          patients: {
+            same: { id: "same", name: "S" },
+            onlyD: { id: "onlyD", name: "D" },
+            dNew: { id: "dNew", name: "Drive" },
+            rNew: { id: "rNew", name: "Drive" },
+            tie: { id: "tie", name: "Drive" },
+          },
+          staff: { s1: { id: "s1", name: "Staff" } },
+          ops: {
+            "patients:same": 100,
+            "patients:onlyD": 100,
+            "patients:dNew": 300,
+            "patients:rNew": 100,
+            "patients:tie": 100,
+            "staff:s1": 100,
+          },
+          deleted: { "patients:gone": 300, "patients:fresh": 300 },
+        };
+        const room = new Map(
+          [
+            { key: "patients:same", ts: 100, value: { id: "same", name: "S" } },
+            { key: "patients:dNew", ts: 200, value: { id: "dNew", name: "Room" } },
+            { key: "patients:rNew", ts: 200, value: { id: "rNew", name: "Room" } },
+            { key: "patients:tie", ts: 100, value: { id: "tie", name: "Room" } },
+            { key: "patients:gone", ts: 200, value: { id: "gone", name: "Room" } },
+            { key: "patients:onlyR", ts: 100, value: { id: "onlyR", name: "Room" } },
+            { key: "patients:roomDel", ts: 150, value: null },
+          ].map((v) => [v.key, { ...v, deviceId: "Y", seq: 1 }]),
+        );
+        const before = JSON.stringify(drive);
+        const rep = sh.compareWithRoom(drive, (k) => room.get(k), [...room.keys()]);
+        check(
+          "shadow: each record lands in the right category",
+          JSON.stringify(rep.patients) ===
+            JSON.stringify({
+              same: 1,
+              onlyDrive: 1,
+              onlyRoom: 1,
+              driveNewer: 2,
+              roomNewer: 1,
+              sameTime: 1,
+            }),
+        );
+        check(
+          "shadow: a Drive-only record in another collection is counted",
+          JSON.stringify(rep.staff) ===
+            JSON.stringify({
+              same: 0,
+              onlyDrive: 1,
+              onlyRoom: 0,
+              driveNewer: 0,
+              roomNewer: 0,
+              sameTime: 0,
+            }),
+        );
+        check(
+          "shadow: a record deleted on both sides is not counted",
+          rep.patients.onlyRoom === 1 && sh.totalsOf(rep).onlyDrive === 2,
+        );
+        check("shadow: the comparison does not change its input", JSON.stringify(drive) === before);
+        const empty = sh.compareWithRoom(drive, () => undefined, []);
+        check(
+          "shadow: an empty room shows every live Drive record as only in Drive",
+          sh.totalsOf(empty).onlyDrive === 6 && sh.totalsOf(empty).onlyRoom === 0,
+        );
+      }
 
-    // Outside a connect window, queueing does nothing.
+      // Outside a connect window, queueing does nothing.
       const idle = new rs.ConnectReconcile();
       idle.queue(rs.localEntries(merged, 9000));
       check(
@@ -1002,6 +1029,337 @@ try {
       "policy: an audit entry cannot be deleted",
       !decide("Admin", ch("auditLogs:a1", null, { baseTs: now })).ok,
     );
+
+    // ---- per-field role rules (phase 4b, item 3) ----
+    const fr = require(join(dir, "lib/hms/field-rules.js"));
+    const { readFileSync } = await import("node:fs");
+    const base = now - 1000;
+    const cur = (key, value) => ({ key, ts: base, deviceId: "d0", value, seq: 1 });
+    const upd = (key, value) => ch(key, value, { baseTs: base });
+    const patient = {
+      id: "p1",
+      name: "Ana",
+      mrn: "M1",
+      dob: "1990-01-01",
+      gender: "F",
+      phone: "1",
+      address: "",
+      fatherName: "",
+      bloodGroup: "O+",
+      allergies: "none",
+      doctor: "",
+      createdAt: 1,
+    };
+    check(
+      "fields: Reception may create a patient with blank clinical fields",
+      decide(
+        "Reception",
+        ch("patients:p2", { ...patient, id: "p2", bloodGroup: "", allergies: "" }),
+      ).ok,
+    );
+    check(
+      "fields: Reception may not create a patient with allergies",
+      !decide("Reception", ch("patients:p2", { ...patient, id: "p2" })).ok,
+    );
+    check(
+      "fields: Reception may change a patient's phone",
+      decide(
+        "Reception",
+        upd("patients:p1", { ...patient, phone: "2" }),
+        cur("patients:p1", patient),
+      ).ok,
+    );
+    check(
+      "fields: Reception may not change a patient's allergies",
+      !decide(
+        "Reception",
+        upd("patients:p1", { ...patient, allergies: "dust" }),
+        cur("patients:p1", patient),
+      ).ok,
+    );
+    check(
+      "fields: Doctor may change a patient's allergies",
+      decide(
+        "Doctor",
+        upd("patients:p1", { ...patient, allergies: "dust" }),
+        cur("patients:p1", patient),
+      ).ok,
+    );
+    check(
+      "fields: one refused field refuses the whole change",
+      !decide(
+        "Reception",
+        upd("patients:p1", { ...patient, phone: "2", allergies: "dust" }),
+        cur("patients:p1", patient),
+      ).ok,
+    );
+    check(
+      "fields: Reception may not delete a patient",
+      !decide("Reception", ch("patients:p1", null, { baseTs: base }), cur("patients:p1", patient))
+        .ok,
+    );
+    check(
+      "fields: Admin may delete a patient",
+      decide("Admin", ch("patients:p1", null, { baseTs: base }), cur("patients:p1", patient)).ok,
+    );
+    const visit = {
+      id: "v1",
+      patientId: "p1",
+      date: "2026-10-01",
+      type: "OPD",
+      doctor: "Dr A",
+      department: "",
+      diagnosis: "",
+      notes: "",
+      createdAt: 1,
+    };
+    check(
+      "fields: Reception may open a visit with a blank diagnosis",
+      decide("Reception", ch("visits:v2", { ...visit, id: "v2" })).ok,
+    );
+    check(
+      "fields: Reception may not write a visit's diagnosis",
+      !decide("Reception", ch("visits:v2", { ...visit, id: "v2", diagnosis: "fever" })).ok,
+    );
+    check(
+      "fields: Nursing may not change a visit's diagnosis",
+      !decide(
+        "Nursing",
+        upd("visits:v1", { ...visit, diagnosis: "fever" }),
+        cur("visits:v1", visit),
+      ).ok,
+    );
+    check(
+      "fields: Doctor may change a visit's diagnosis",
+      decide("Doctor", upd("visits:v1", { ...visit, diagnosis: "fever" }), cur("visits:v1", visit))
+        .ok,
+    );
+    const rx = {
+      id: "rx1",
+      patientId: "p1",
+      visitId: "v1",
+      date: "2026-10-01",
+      doctor: "Dr A",
+      diagnosis: "fever",
+      items: [{ name: "Paracetamol" }],
+      notes: "",
+      signOff: "Dr A",
+      itemDispensed: [false],
+      createdAt: 1,
+    };
+    check(
+      "fields: Pharmacy may mark a prescription item dispensed",
+      decide(
+        "Pharmacy",
+        upd("prescriptions:rx1", { ...rx, itemDispensed: [true] }),
+        cur("prescriptions:rx1", rx),
+      ).ok,
+    );
+    check(
+      "fields: Pharmacy may not change a prescription's items",
+      !decide(
+        "Pharmacy",
+        upd("prescriptions:rx1", { ...rx, items: [{ name: "X" }] }),
+        cur("prescriptions:rx1", rx),
+      ).ok,
+    );
+    check(
+      "fields: Doctor may not mark a prescription item dispensed",
+      !decide(
+        "Doctor",
+        upd("prescriptions:rx1", { ...rx, itemDispensed: [true] }),
+        cur("prescriptions:rx1", rx),
+      ).ok,
+    );
+    const order = {
+      id: "lo1",
+      patientId: "p1",
+      visitId: "v1",
+      date: "2026-10-01",
+      tests: "CBC",
+      priority: "Routine",
+      status: "Ordered",
+      orderedBy: "Dr A",
+      notes: "",
+      createdAt: 1,
+    };
+    check(
+      "fields: Lab may move an order to collected",
+      decide(
+        "Lab",
+        upd("labOrders:lo1", { ...order, status: "Collected" }),
+        cur("labOrders:lo1", order),
+      ).ok,
+    );
+    check(
+      "fields: Lab may not change the tests ordered",
+      !decide("Lab", upd("labOrders:lo1", { ...order, tests: "LFT" }), cur("labOrders:lo1", order))
+        .ok,
+    );
+    const bill = {
+      id: "b1",
+      patientId: "p1",
+      visitId: "v1",
+      date: "2026-10-01",
+      items: [{ n: 1 }],
+      totalAmount: 100,
+      paid: 0,
+      due: 100,
+      paymentMode: "",
+      createdAt: 1,
+    };
+    check(
+      "fields: Billing may change bill items",
+      decide("Billing", upd("bills:b1", { ...bill, items: [{ n: 2 }] }), cur("bills:b1", bill)).ok,
+    );
+    check(
+      "fields: Reception may not change bill items",
+      !decide("Reception", upd("bills:b1", { ...bill, items: [{ n: 2 }] }), cur("bills:b1", bill))
+        .ok,
+    );
+    check(
+      "fields: Reception may record a payment",
+      decide("Reception", upd("bills:b1", { ...bill, paid: 100, due: 0 }), cur("bills:b1", bill))
+        .ok,
+    );
+    const appt = {
+      id: "a1",
+      patientId: "p1",
+      date: "2026-10-01",
+      time: "09:00",
+      doctor: "Dr A",
+      department: "",
+      type: "OPD",
+      status: "Booked",
+      notes: "",
+      tokenNo: 1,
+      tokenTime: "09:00",
+      createdAt: 1,
+    };
+    check(
+      "fields: Reception may delete an appointment",
+      decide(
+        "Reception",
+        ch("appointments:a1", null, { baseTs: base }),
+        cur("appointments:a1", appt),
+      ).ok,
+    );
+    check(
+      "fields: Doctor may not delete an appointment",
+      !decide("Doctor", ch("appointments:a1", null, { baseTs: base }), cur("appointments:a1", appt))
+        .ok,
+    );
+    const note = {
+      id: "h1",
+      date: "2026-10-01",
+      time: "08:00",
+      author: "Nurse A",
+      role: "Nursing",
+      category: "Handover",
+      patientId: "p1",
+      text: "check drain",
+      resolved: false,
+      createdAt: 1,
+    };
+    check(
+      "fields: Nursing may write a handover note with its author",
+      decide("Nursing", ch("handoverNotes:h2", { ...note, id: "h2" })).ok,
+    );
+    check(
+      "fields: a handover note's author cannot change afterwards",
+      !decide(
+        "Nursing",
+        upd("handoverNotes:h1", { ...note, author: "Nurse B" }),
+        cur("handoverNotes:h1", note),
+      ).ok,
+    );
+    check(
+      "fields: Lab may resolve a handover note",
+      decide(
+        "Lab",
+        upd("handoverNotes:h1", { ...note, resolved: true, resolvedBy: "Lab A" }),
+        cur("handoverNotes:h1", note),
+      ).ok,
+    );
+    check(
+      "fields: Lab may not change a handover note's text",
+      !decide("Lab", upd("handoverNotes:h1", { ...note, text: "x" }), cur("handoverNotes:h1", note))
+        .ok,
+    );
+    check(
+      "fields: Nursing may not delete a handover note",
+      !decide(
+        "Nursing",
+        ch("handoverNotes:h1", null, { baseTs: base }),
+        cur("handoverNotes:h1", note),
+      ).ok,
+    );
+    check(
+      "fields: Admin may delete a handover note",
+      decide("Admin", ch("handoverNotes:h1", null, { baseTs: base }), cur("handoverNotes:h1", note))
+        .ok,
+    );
+    check(
+      "fields: Reception may not change a service rate",
+      !decide("Reception", ch("serviceRates:r1", { section: "OT", item: "x", rate: 5 })).ok,
+    );
+    check(
+      "fields: Admin may change a service rate",
+      decide("Admin", ch("serviceRates:r1", { section: "OT", item: "x", rate: 5 })).ok,
+    );
+    const bed = {
+      id: "bd1",
+      ward: "W1",
+      room: "101",
+      label: "101-A",
+      rate: 500,
+      active: true,
+      notes: "",
+      createdAt: 1,
+    };
+    check(
+      "fields: Reception may not change a bed's rate",
+      !decide("Reception", upd("beds:bd1", { ...bed, rate: 600 }), cur("beds:bd1", bed)).ok,
+    );
+    check(
+      "fields: Reception may change a bed's label",
+      decide("Reception", upd("beds:bd1", { ...bed, label: "101-B" }), cur("beds:bd1", bed)).ok,
+    );
+    check(
+      "fields: Pharmacy may change a medicine; Doctor may not",
+      decide("Pharmacy", ch("meds:m1", { name: "Paracetamol", saleRate: 2 })).ok &&
+        !decide("Doctor", ch("meds:m1", { name: "Paracetamol", saleRate: 2 })).ok,
+    );
+    check(
+      "fields: a field with no rule is refused for everyone but Admin",
+      !decide("Reception", ch("patients:p9", { name: "x", surprise: "y" })).ok &&
+        decide("Admin", ch("patients:p9", { name: "x", surprise: "y" })).ok,
+    );
+    // Coverage: every field of every synced record type (except auditLogs) has an entry in FIELD_RULES.
+    {
+      const src = readFileSync("src/lib/hms/types.ts", "utf8");
+      const hms = src.slice(src.indexOf("export interface HmsState"));
+      const body = hms.slice(0, hms.indexOf("\n}"));
+      const missing = [];
+      for (const [, collection, typeName] of body.matchAll(/^\s+(\w+): Record<ID, (\w+)>;/gm)) {
+        if (collection === "auditLogs") continue;
+        const m = src.match(
+          new RegExp("^export interface " + typeName + " \\{\\n([\\s\\S]*?)^\\}", "m"),
+        );
+        if (!m) {
+          missing.push(`${collection}: no interface ${typeName}`);
+          continue;
+        }
+        for (const [, field] of m[1].matchAll(/^\s+(\w+)\??:/gm)) {
+          if (field === "id" || field === "createdAt") continue;
+          if (!fr.FIELD_RULES[collection] || !(field in fr.FIELD_RULES[collection])) {
+            missing.push(`${collection}.${field}`);
+          }
+        }
+      }
+      check("fields: every field of every synced record type has a rule", missing.length === 0);
+      if (missing.length) console.error("  no rule for:", missing.join(", "));
+    }
     check("policy: an unknown record is refused", !decide("Admin", ch("secrets:x", { a: 1 })).ok);
 
     // A refused change: the device drops it and takes the room's version.
