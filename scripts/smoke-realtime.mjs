@@ -1411,12 +1411,38 @@ try {
         cur("admissions:ad1", { id: "ad1" }),
       ).ok,
     );
-    // Known gap, not yet decided: the IPD discharge writes Doctor-only fields, and the
-    // Discharge button is shown to every role on the IPD page. This records the current rule.
+    // IPD discharge (decided by the user): Reception and Nursing may discharge, including
+    // the visit's discharge date and follow-up. Pharmacy may not.
     check(
-      "fields: Reception may not write a discharge summary (current rule, decision pending)",
-      !decide(
+      "fields: Reception may write a discharge summary (approved)",
+      decide(
         "Reception",
+        upd("admissions:ad1", { id: "ad1", dischargeSummary: "ok" }),
+        cur("admissions:ad1", { id: "ad1" }),
+      ).ok,
+    );
+    check(
+      "fields: Nursing may discharge a patient (admission and visit)",
+      decide(
+        "Nursing",
+        upd("admissions:ad1", {
+          id: "ad1",
+          status: "Discharged",
+          dischargeDate: "2026-10-02",
+          dischargedBy: "N",
+        }),
+        cur("admissions:ad1", { id: "ad1" }),
+      ).ok &&
+        decide(
+          "Nursing",
+          upd("visits:v1", { id: "v1", dischargeDate: "2026-10-02", followUp: "review in 1 week" }),
+          cur("visits:v1", { id: "v1" }),
+        ).ok,
+    );
+    check(
+      "fields: Pharmacy may not discharge a patient",
+      !decide(
+        "Pharmacy",
         upd("admissions:ad1", { id: "ad1", dischargeSummary: "ok" }),
         cur("admissions:ad1", { id: "ad1" }),
       ).ok,
