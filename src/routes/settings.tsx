@@ -1014,7 +1014,8 @@ function DevicePinsCard({ requireLogin }: { requireLogin: boolean }) {
       <p className="text-sm text-muted-foreground">
         This device has no hospital room, so an Admin sets each staff member&apos;s 4-digit PIN
         here. With login on, staff sign in with their PIN. PINs stay on this device: they are not
-        synced or backed up. Five wrong PINs clear one.
+        synced or backed up. After five wrong PINs, sign-in pauses for one minute; the PINs stay
+        set.
       </p>
       {accounts.length === 0 ? (
         <p className="text-sm text-muted-foreground">No active staff accounts yet.</p>
