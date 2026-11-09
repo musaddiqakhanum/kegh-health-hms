@@ -104,7 +104,7 @@ function Dashboard() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Recent visits
           </h3>

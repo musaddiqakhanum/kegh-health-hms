@@ -81,6 +81,19 @@ function BillingPage() {
       toast.error("Add at least one line item");
       return;
     }
+    if (cleaned.some((i) => Number(i.qty) < 0 || Number(i.rate) < 0)) {
+      toast.error("Quantity and rate cannot be negative");
+      return;
+    }
+    const paidNow = Number(form.paid || 0);
+    if (paidNow < 0) {
+      toast.error("Paid amount cannot be negative");
+      return;
+    }
+    if (paidNow > total) {
+      toast.error("Paid amount is more than the bill total");
+      return;
+    }
     upsert<Bill>("bills", {
       ...form,
       payerName: form.payerId ? (state.payers[form.payerId]?.name ?? form.payerName ?? "") : "",

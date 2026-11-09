@@ -101,7 +101,10 @@ check(
 );
 
 const list = ch.serviceRateList(state);
-check("serviceRateList sorts by section then item", list.map((r) => r.id).join(",") === "r4,r3,r1,r2,r5");
+check(
+  "serviceRateList sorts by section then item",
+  list.map((r) => r.id).join(",") === "r4,r3,r1,r2,r5",
+);
 check(
   "serviceRateList filters by section",
   ch.serviceRateList(state, "Lab").every((r) => r.section === "Lab"),
