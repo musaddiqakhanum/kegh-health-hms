@@ -66,7 +66,10 @@ check(
 
 /* idle auto-lock predicate */
 check("idle: disabled at 0 minutes", sc.idleTimedOut(0, 86_400_000, 0) === false);
-check("idle: under the limit stays in", sc.idleTimedOut(1_000_000, 1_000_000 + 14 * 60_000, 15) === false);
+check(
+  "idle: under the limit stays in",
+  sc.idleTimedOut(1_000_000, 1_000_000 + 14 * 60_000, 15) === false,
+);
 check(
   "idle: exactly at the limit locks",
   sc.idleTimedOut(1_000_000, 1_000_000 + 15 * 60_000, 15) === true,

@@ -4,7 +4,7 @@ import { Pencil, Plus, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useHms } from "@/lib/hms/store";
 import { searchPatients } from "@/lib/hms/selectors";
-import { ageFromDob, fmtDate, fmtDateTime } from "@/lib/hms/format";
+import { ageFromDob, fmtDate, fmtDateTime, todayISO } from "@/lib/hms/format";
 import { nextMrn } from "@/lib/hms/mrn";
 import { PMJAY_SCHEMES, PMJAY_STATUSES, type Patient } from "@/lib/hms/types";
 import { digitsOnly, formatAbhaNumber, normalizePmjayCardId } from "@/lib/abdm/healthId";
@@ -87,6 +87,10 @@ function PatientsPage() {
     }
     if (!form.dob) {
       toast.error("Date of birth is required");
+      return;
+    }
+    if (form.dob > todayISO()) {
+      toast.error("Date of birth cannot be in the future");
       return;
     }
     const abha = digitsOnly(form.abhaNumber ?? "");
@@ -211,6 +215,7 @@ function PatientsPage() {
           <Field label="Date of birth" required>
             <Input
               type="date"
+              max={todayISO()}
               value={form.dob ?? ""}
               onChange={(e) => set("dob", e.target.value)}
             />

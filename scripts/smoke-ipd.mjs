@@ -152,7 +152,10 @@ check(
 );
 check(
   "admissionsForPatient: discharged patient still listed",
-  ipd.admissionsForPatient(state, "p2").map((a) => a.id).join(",") === "a2",
+  ipd
+    .admissionsForPatient(state, "p2")
+    .map((a) => a.id)
+    .join(",") === "a2",
 );
 check(
   "admissionsForPatient: unknown patient → empty",
@@ -186,7 +189,10 @@ check(
 );
 check(
   "dueTodayDischarges: explicit date works",
-  ipd.dueTodayDischarges(dueState, "2026-12-31").map((a) => a.id).join(",") === "a6",
+  ipd
+    .dueTodayDischarges(dueState, "2026-12-31")
+    .map((a) => a.id)
+    .join(",") === "a6",
 );
 check(
   "dueTodayDischarges: quiet day → empty",

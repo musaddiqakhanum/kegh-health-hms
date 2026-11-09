@@ -97,6 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawer(false);
       if (
         e.key === "/" &&
         document.activeElement?.tagName !== "INPUT" &&
@@ -110,14 +111,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Auto-sync
+  // Auto-sync. The timer must not restart on every data change: `state` and
+  // `settings` change constantly (every save, every sync), and tearing the
+  // interval down each time meant it could keep resetting and never fire.
+  // The tick reads the latest values through a ref instead.
+  const latest = useRef({ state, settings });
+  latest.current = { state, settings };
+  const { autoSync, driveClientId, syncIntervalMinutes } = settings;
   useEffect(() => {
-    if (!ready || !settings.autoSync || !settings.driveClientId) return;
+    if (!ready || !autoSync || !driveClientId) return;
     const tick = async () => {
-      if (syncing.current || !navigator.onLine || !getStoredToken(driveScopeFor(settings))) return;
+      const { state: current, settings: cfg } = latest.current;
+      if (syncing.current || !navigator.onLine || !getStoredToken(driveScopeFor(cfg))) return;
       syncing.current = true;
       try {
-        const { merged, fileCount } = await runSync(state, settings);
+        const { merged, fileCount } = await runSync(current, cfg);
         mergeIn(merged);
         updateSettings({ lastSyncAt: Date.now(), lastSyncFileCount: fileCount });
       } catch (err) {
@@ -126,9 +134,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         syncing.current = false;
       }
     };
-    const id = setInterval(tick, Math.max(1, settings.syncIntervalMinutes) * 60_000);
+    const id = setInterval(tick, Math.max(1, syncIntervalMinutes) * 60_000);
     return () => clearInterval(id);
-  }, [ready, settings, state, mergeIn, updateSettings]);
+  }, [ready, autoSync, driveClientId, syncIntervalMinutes, mergeIn, updateSettings]);
 
   if (!ready) {
     return (
@@ -264,8 +272,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="hidden md:block">{sidebar}</div>
       {drawer ? (
         <div className="fixed inset-0 z-40 flex md:hidden">
-          <div className="h-full">{sidebar}</div>
-          <div className="flex-1 bg-black/40" onClick={() => setDrawer(false)} />
+          <div className="h-full animate-in slide-in-from-left duration-200 motion-reduce:animate-none">
+            {sidebar}
+          </div>
+          <div
+            className="flex-1 animate-in fade-in-0 bg-black/40 duration-200 motion-reduce:animate-none"
+            onClick={() => setDrawer(false)}
+          />
         </div>
       ) : null}
 
@@ -333,7 +346,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        {/* Keyed by route so each page fades in instead of snapping. */}
+        <main
+          key={pathname}
+          className="flex-1 animate-in fade-in-0 duration-200 p-4 motion-reduce:animate-none md:p-6"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

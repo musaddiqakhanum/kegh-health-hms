@@ -131,21 +131,51 @@ try {
   check("missing pain is blank", ns.formatVital("painScore", undefined) === "—");
   check("pain >=8 is critical", ns.vitalSeverity("painScore", 8) === "critical");
   check("single flag lists its value", ns.vitalFlags(state.vitals.v2)[0]?.value === "88%");
-  check("quick summary has four vitals", ns.vitalsSummary(state.vitals.v1) === "98.6°F · 80/min · 120/80 · 98%");
+  check(
+    "quick summary has four vitals",
+    ns.vitalsSummary(state.vitals.v1) === "98.6°F · 80/min · 120/80 · 98%",
+  );
 
   check("valid set passes", ns.validateVitals(state.vitals.v1) === null);
   check("must chart a real observation", ns.validateVitals({})?.includes("Record at least"));
-  check("rejects impossible SpO2", ns.validateVitals({ ...state.vitals.v1, spo2: 101 })?.includes("SpO₂"));
-  check("rejects incomplete BP", ns.validateVitals({ ...state.vitals.v1, bpDiastolic: 0 })?.includes("both BP"));
-  check("rejects inverted BP", ns.validateVitals({ ...state.vitals.v1, bpDiastolic: 125 })?.includes("higher"));
+  check(
+    "rejects impossible SpO2",
+    ns.validateVitals({ ...state.vitals.v1, spo2: 101 })?.includes("SpO₂"),
+  );
+  check(
+    "rejects incomplete BP",
+    ns.validateVitals({ ...state.vitals.v1, bpDiastolic: 0 })?.includes("both BP"),
+  );
+  check(
+    "rejects inverted BP",
+    ns.validateVitals({ ...state.vitals.v1, bpDiastolic: 125 })?.includes("higher"),
+  );
   check("pain 0 is valid", ns.validateVitals({ ...state.vitals.v1, painScore: 0 }) === null);
-  check("pain > 10 rejected", ns.validateVitals({ ...state.vitals.v1, painScore: 11 })?.includes("Pain"));
+  check(
+    "pain > 10 rejected",
+    ns.validateVitals({ ...state.vitals.v1, painScore: 11 })?.includes("Pain"),
+  );
 
-  check("vitals newest first", ns.vitalsForPatient(state, "p1").map((x) => x.id).join(",") === "v2,v1,prev");
+  check(
+    "vitals newest first",
+    ns
+      .vitalsForPatient(state, "p1")
+      .map((x) => x.id)
+      .join(",") === "v2,v1,prev",
+  );
   check("admission filter excludes other stays", ns.vitalsForAdmission(state, "a1").length === 2);
-  check("date range is inclusive", ns.filterVitals(ns.vitalsList(state), { from: dt, to: dt }).length === 3);
-  check("shift filters readings", ns.filterVitals(ns.vitalsList(state), { shift: "Evening" }).length === 2);
-  check("flag filter excludes normal", ns.filterVitals(ns.vitalsList(state), { abnormalOnly: true }).length === 2);
+  check(
+    "date range is inclusive",
+    ns.filterVitals(ns.vitalsList(state), { from: dt, to: dt }).length === 3,
+  );
+  check(
+    "shift filters readings",
+    ns.filterVitals(ns.vitalsList(state), { shift: "Evening" }).length === 2,
+  );
+  check(
+    "flag filter excludes normal",
+    ns.filterVitals(ns.vitalsList(state), { abnormalOnly: true }).length === 2,
+  );
   check("empty patient has no vitals", ns.vitalsForPatient(state, "missing").length === 0);
 
   const round = ns.wardRounds(state, dt);
@@ -153,13 +183,31 @@ try {
   check("uncharted patient first", round[0].patient.id === "p2" && !round[0].today);
   check("OPD set same day does not count for in-patient round", round[0].last === undefined);
   check("latest stay reading wins", round[1].last.id === "v2");
-  check("roundsDue returns only uncharted in-patients", ns.roundsDue(state, dt).map((r) => r.patient.id).join(",") === "p2");
+  check(
+    "roundsDue returns only uncharted in-patients",
+    ns
+      .roundsDue(state, dt)
+      .map((r) => r.patient.id)
+      .join(",") === "p2",
+  );
   const stats = ns.nursingStats(state, dt);
-  check("workspace stats count patients, not duplicate sets", stats.admitted === 2 && stats.chartedToday === 2 && stats.readingsToday === 3 && stats.dueToday === 1);
-  check("flags and notes in stats", stats.abnormalToday === 2 && stats.criticalToday === 2 && stats.notesToday === 1);
+  check(
+    "workspace stats count patients, not duplicate sets",
+    stats.admitted === 2 &&
+      stats.chartedToday === 2 &&
+      stats.readingsToday === 3 &&
+      stats.dueToday === 1,
+  );
+  check(
+    "flags and notes in stats",
+    stats.abnormalToday === 2 && stats.criticalToday === 2 && stats.notesToday === 1,
+  );
 
   check("notes newest first", ns.notesForPatient(state, "p1")[0]?.id === "n1");
-  check("notes for admission exclude other patients", ns.notesForAdmission(state, "a1").length === 1);
+  check(
+    "notes for admission exclude other patients",
+    ns.notesForAdmission(state, "a1").length === 1,
+  );
   check("search note text", ns.searchNotes(ns.noteList(state), "dressing")[0]?.id === "n1");
   check("search note category", ns.searchNotes(ns.noteList(state), "progress")[0]?.id === "n1");
 
@@ -177,13 +225,21 @@ try {
   check("remote-only vitals are brought in", merged.vitals.v3.id === "v3");
   check("local-only nursing notes survive", merged.nursingNotes.n2.id === "n2");
   const deleted = mergeStates(local, {
-    vitals: {}, nursingNotes: {}, ops: {}, deleted: { "vitals:v1": 8, "nursingNotes:n1": 8 },
+    vitals: {},
+    nursingNotes: {},
+    ops: {},
+    deleted: { "vitals:v1": 8, "nursingNotes:n1": 8 },
   });
   check("vitals tombstone wins on sync", !deleted.vitals.v1);
   check("nursing note tombstone wins on sync", !deleted.nursingNotes.n1);
-  check("legacy backup without new collections merges", !!mergeStates(local, { ops: {}, deleted: {} }).vitals.v1);
+  check(
+    "legacy backup without new collections merges",
+    !!mergeStates(local, { ops: {}, deleted: {} }).vitals.v1,
+  );
 
-  console.log(failures === 0 ? "\nAll nursing smoke tests passed." : `\n${failures} test(s) FAILED`);
+  console.log(
+    failures === 0 ? "\nAll nursing smoke tests passed." : `\n${failures} test(s) FAILED`,
+  );
   process.exitCode = failures ? 1 : 0;
 } finally {
   rmSync(dir, { recursive: true, force: true });
