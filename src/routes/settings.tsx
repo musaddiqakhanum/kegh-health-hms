@@ -111,25 +111,30 @@ function SettingsPage() {
       toast.error("That username is already taken");
       return;
     }
-    if (accountPass.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
+    // A device with no room keeps no password (it would be lost on reload, and
+    // only the device PIN signs in there). Passwords are set on room devices.
+    let passwordFields: Partial<User> = {};
+    if (realtime.configured) {
+      if (accountPass.length < 8) {
+        toast.error("Password must be at least 8 characters");
+        return;
+      }
+      if (accountPass !== accountPass2) {
+        toast.error("Passwords do not match");
+        return;
+      }
+      const salt = newSaltHex();
+      const passwordHash = await hashPassword(accountPass, salt);
+      passwordFields = { passwordHash, salt };
     }
-    if (accountPass !== accountPass2) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    const salt = newSaltHex();
-    const passwordHash = await hashPassword(accountPass, salt);
     const roleToSave = users.length === 0 ? "Admin" : newRole;
     const id = upsert<User>("users", {
       username: uname,
       displayName: disp,
       role: roleToSave,
       staffId: staffPick || undefined,
-      passwordHash,
-      salt,
       active: true,
+      ...passwordFields,
     } as Partial<User>);
     writeAudit("create", id);
     toast.success(`Account created for ${disp} (${roleToSave})`);
@@ -446,16 +451,18 @@ function SettingsPage() {
                     <Badge tone={u.active ? "green" : "red"}>
                       {u.active ? "Active" : "Disabled"}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setResetUser(u);
-                        setResetPass("");
-                        setResetPass2("");
-                      }}
-                    >
-                      Reset password
-                    </Button>
+                    {realtime.configured ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setResetUser(u);
+                          setResetPass("");
+                          setResetPass2("");
+                        }}
+                      >
+                        Reset password
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
                       title="Ends every signed-in session for this account on all devices at the next sync"
@@ -526,23 +533,33 @@ function SettingsPage() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Password" required>
-                  <Input
-                    type="password"
-                    placeholder="At least 8 characters"
-                    autoComplete="new-password"
-                    value={accountPass}
-                    onChange={(e) => setAccountPass(e.target.value)}
-                  />
-                </Field>
-                <Field label="Confirm password" required>
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    value={accountPass2}
-                    onChange={(e) => setAccountPass2(e.target.value)}
-                  />
-                </Field>
+                {realtime.configured ? (
+                  <>
+                    <Field label="Password" required>
+                      <Input
+                        type="password"
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
+                        value={accountPass}
+                        onChange={(e) => setAccountPass(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Confirm password" required>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        value={accountPass2}
+                        onChange={(e) => setAccountPass2(e.target.value)}
+                      />
+                    </Field>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground sm:col-span-2">
+                    This device has no hospital room, so no password is kept here. Staff sign in
+                    with the device PIN set below. The room refuses accounts without a password, so
+                    connect the room first, then create staff accounts.
+                  </p>
+                )}
               </div>
               <div className="mt-4">
                 <Button onClick={() => void createUser()}>
@@ -1014,7 +1031,8 @@ function DevicePinsCard({ requireLogin }: { requireLogin: boolean }) {
       <p className="text-sm text-muted-foreground">
         This device has no hospital room, so an Admin sets each staff member&apos;s 4-digit PIN
         here. With login on, staff sign in with their PIN. PINs stay on this device: they are not
-        synced or backed up. Five wrong PINs clear one.
+        synced or backed up. After five wrong PINs, sign-in pauses for one minute; the PINs stay
+        set.
       </p>
       {accounts.length === 0 ? (
         <p className="text-sm text-muted-foreground">No active staff accounts yet.</p>

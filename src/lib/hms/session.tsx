@@ -163,9 +163,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const r = await realtimeSignIn(username, password);
       if (!r.ok) {
         const count = f.count + 1;
-        writeFailures(
-          count >= MAX_FAILURES ? { count: 0, until: now + LOCKOUT_MS } : { count, until: 0 },
-        );
+        if (count >= MAX_FAILURES) {
+          // The lock starts on this failure, so say so now, not on the next try.
+          writeFailures({ count: 0, until: now + LOCKOUT_MS });
+          return { ok: false, error: "locked", lockSeconds: LOCKOUT_MS / 1000 };
+        }
+        writeFailures({ count, until: 0 });
         return { ok: false, error: "room", message: r.error };
       }
 
@@ -193,9 +196,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!check.ok) {
         if (check.error === "expired") return { ok: false, error: "expired" };
         const count = f.count + 1;
-        writeFailures(
-          count >= MAX_FAILURES ? { count: 0, until: now + LOCKOUT_MS } : { count, until: 0 },
-        );
+        if (count >= MAX_FAILURES) {
+          writeFailures({ count: 0, until: now + LOCKOUT_MS });
+          if (check.error === "cleared") return { ok: false, error: "cleared" };
+          return { ok: false, error: "locked", lockSeconds: LOCKOUT_MS / 1000 };
+        }
+        writeFailures({ count, until: 0 });
         return { ok: false, error: check.error === "cleared" ? "cleared" : "invalid" };
       }
       // The account must still exist and be active on this device.
